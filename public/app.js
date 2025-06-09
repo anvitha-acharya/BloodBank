@@ -6,14 +6,14 @@ let isInitialized = false;
 async function initWeb3() {
     try {
         // Check if MetaMask is installed
-        if (typeof window.ethereum !== 'undefined') {
+if (typeof window.ethereum !== 'undefined') {
             // Request account access
             const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
             if (!accounts || accounts.length === 0) {
                 throw new Error('No accounts found');
             }
             
-            web3 = new Web3(window.ethereum);
+    web3 = new Web3(window.ethereum);
             
             // Initialize contract
             const contractAddress = '0x3a9227BeFBe723f78Ea463AF0D993B34B603494F';
@@ -30,7 +30,7 @@ async function initWeb3() {
                 alert('Contract not found at the specified address. Please make sure the contract is deployed correctly.');
                 return false;
             }
-        } else {
+} else {
             alert("Please install MetaMask to use this application.");
             return false;
         }
@@ -1432,23 +1432,23 @@ async function donateBlood() {
 // Function to display stored donation details
 async function displayStoredDonationDetails() {
     try {
-        const donationDetailsList = document.getElementById('donationDetailsList');
+		const donationDetailsList = document.getElementById('donationDetailsList');
         const totalDonatedElement = document.getElementById('totalDonated');
         const lastDonationElement = document.getElementById('lastDonation');
         const bloodTypeElement = document.getElementById('bloodType');
-        
-        if (donationDetailsList) {
+	
+		if (donationDetailsList) {
             let totalAmount = 0;
             let lastDonation = null;
             let bloodType = null;
             donationDetailsList.innerHTML = ''; // Clear existing entries
-            
+	
             // Get all donation entries and sort them by timestamp
             const donations = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key.startsWith('donation_')) {
-                    const donationData = JSON.parse(localStorage.getItem(key));
+			for (let i = 0; i < localStorage.length; i++) {
+				const key = localStorage.key(i);
+				if (key.startsWith('donation_')) {
+					const donationData = JSON.parse(localStorage.getItem(key));
                     donations.push({
                         ...donationData,
                         timestamp: parseInt(key.split('_')[1])
@@ -1461,8 +1461,8 @@ async function displayStoredDonationDetails() {
 
             // Display donations and update statistics
             donations.forEach(donation => {
-                // Create list item and append it to the list
-                const listItem = document.createElement('li');
+					// Create list item and append it to the list
+					const listItem = document.createElement('li');
                 listItem.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span>Donation from donor at ${donation.donorAddress}. Blood Type: ${donation.bloodType}, Amount: ${donation.amount}</span>
@@ -1470,9 +1470,9 @@ async function displayStoredDonationDetails() {
                                 class="btn btn-danger" style="margin-left: 10px; padding: 2px 8px;">Remove</button>
                     </div>
                 `;
-                donationDetailsList.appendChild(listItem);
-                
-                // Update total amount
+					donationDetailsList.appendChild(listItem);
+	
+					// Update total amount
                 totalAmount += parseInt(donation.amount);
 
                 // Update last donation if not set
@@ -1485,9 +1485,9 @@ async function displayStoredDonationDetails() {
                     bloodType = donation.bloodType;
                 }
             });
-            
-            // Display the total amount
-            if (totalDonatedElement) {
+	
+			// Display the total amount
+			if (totalDonatedElement) {
                 totalDonatedElement.textContent = totalAmount;
             }
 
@@ -1504,39 +1504,39 @@ async function displayStoredDonationDetails() {
             // Display blood type
             if (bloodTypeElement) {
                 bloodTypeElement.textContent = bloodType || 'Not specified';
-            }
-        } else {
-            console.error('Element with ID "donationDetailsList" not found.');
+			}
+		} else {
+			console.error('Element with ID "donationDetailsList" not found.');
         }
     } catch (error) {
         console.error('Error displaying donation details:', error);
         alert('Error loading donation details. Please check console for details.');
-    }
-}
+		}
+	}
 
-// Function to request blood
-async function requestBlood() {
-    try {
-        const patientAddress = getCurrentUserAddress();
-        
-        // Check if the patient address is available
-        if (!patientAddress) {
-            console.error('Patient address not available');
-            return;
-        }
+	// Function to request blood
+	async function requestBlood() {
+		try {
+			const patientAddress = getCurrentUserAddress();
+			
+			// Check if the patient address is available
+			if (!patientAddress) {
+				console.error('Patient address not available');
+				return;
+			}
 
-        // Prompt the user for the blood type and amount
-        const bloodType = prompt('Enter blood type (A, B, AB, O):');
-        const amount = parseInt(prompt('Enter the amount of blood requested:'));
+			// Prompt the user for the blood type and amount
+			const bloodType = prompt('Enter blood type (A, B, AB, O):');
+			const amount = parseInt(prompt('Enter the amount of blood requested:'));
 
-        // Call the smart contract function for blood request with specified blood type and amount
-        await bloodBankContract.methods.requestBlood(bloodType, amount).send({ from: patientAddress });
+			// Call the smart contract function for blood request with specified blood type and amount
+			await bloodBankContract.methods.requestBlood(bloodType, amount).send({ from: patientAddress });
 
-        alert('Blood Request Sent');
-    } catch (error) {
-        console.error('Error during blood request:', error.message);
-    }
-}
+			alert('Blood Request Sent');
+		} catch (error) {
+			console.error('Error during blood request:', error.message);
+		}
+	}
 
 // Function to display blood requests
 async function displayBloodRequests(targetElementId) {
@@ -1556,11 +1556,11 @@ async function displayBloodRequests(targetElementId) {
         // First, collect all pending requests
         for (const patientAddress of registeredPatients) {
             for (let bloodType = 0; bloodType < 4; bloodType++) {
-                const requests = await bloodBankContract.methods.getPatientRequests(patientAddress, bloodType).call();
+            const requests = await bloodBankContract.methods.getPatientRequests(patientAddress, bloodType).call();
 
                 if (requests.length > 0) {
-                    for (const request of requests) {
-                        if (!request.isResponded) {
+            for (const request of requests) {
+                if (!request.isResponded) {
                             const patient = await bloodBankContract.methods.patients(patientAddress).call();
                             pendingRequests.push({
                                 patientAddress,
@@ -1871,7 +1871,7 @@ async function declineUser() {
         // Refresh the display
         await displayRegisteredUsers();
         
-    } catch (error) {
+		} catch (error) {
         console.error('Error during declining user:', error);
         alert('Error declining user: ' + error.message);
     }

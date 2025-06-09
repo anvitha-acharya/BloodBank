@@ -142,17 +142,35 @@
                     }
                 }
 
-                // Get blood stock counts
-                const bloodTypeA = await bloodBankContract.methods.bloodInventory(0).call();
-                const bloodTypeB = await bloodBankContract.methods.bloodInventory(1).call();
-                const bloodTypeAB = await bloodBankContract.methods.bloodInventory(2).call();
-                const bloodTypeO = await bloodBankContract.methods.bloodInventory(3).call();
+                // Initialize blood stock counters
+                let bloodStock = {
+                    'A': 0,
+                    'B': 0,
+                    'AB': 0,
+                    'O': 0
+                };
 
-                // Update the display
-                document.getElementById('bloodTypeA').textContent = bloodTypeA;
-                document.getElementById('bloodTypeB').textContent = bloodTypeB;
-                document.getElementById('bloodTypeAB').textContent = bloodTypeAB;
-                document.getElementById('bloodTypeO').textContent = bloodTypeO;
+                // Get all donation entries and calculate totals
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key.startsWith('donation_')) {
+                        try {
+                            const donationData = JSON.parse(localStorage.getItem(key));
+                            if (donationData && donationData.bloodType && donationData.amount) {
+                                // Add to the total for this blood type
+                                bloodStock[donationData.bloodType] += parseInt(donationData.amount);
+                            }
+                        } catch (error) {
+                            console.error('Error parsing donation data:', error);
+                        }
+                    }
+                }
+
+                // Update the display with animation
+                updateWithAnimation('bloodTypeA', bloodStock['A']);
+                updateWithAnimation('bloodTypeB', bloodStock['B']);
+                updateWithAnimation('bloodTypeAB', bloodStock['AB']);
+                updateWithAnimation('bloodTypeO', bloodStock['O']);
 
                 // Get recent donations
                 const donationsList = document.getElementById('donationsList');
@@ -202,14 +220,33 @@
             }
         }
 
+        // Function to update numbers with animation
+        function updateWithAnimation(elementId, newValue) {
+            const element = document.getElementById(elementId);
+            const currentValue = parseInt(element.textContent) || 0;
+            const targetValue = parseInt(newValue) || 0;
+            
+            if (currentValue !== targetValue) {
+                element.style.transition = 'all 0.5s ease-in-out';
+                element.style.transform = 'scale(1.2)';
+                element.style.color = targetValue > currentValue ? '#4CAF50' : '#f44336';
+                
+                setTimeout(() => {
+                    element.textContent = targetValue;
+                    element.style.transform = 'scale(1)';
+                    element.style.color = 'inherit';
+                }, 250);
+            }
+        }
+
         // Initialize on page load
         window.addEventListener('load', async () => {
             try {
                 await initWeb3();
                 await updateBloodStock();
                 
-                // Update every 5 seconds
-                setInterval(updateBloodStock, 5000);
+                // Update every 2 seconds for more frequent updates
+                setInterval(updateBloodStock, 2000);
 
                 // Listen for account changes
                 if (window.ethereum) {
@@ -225,6 +262,26 @@
                         await updateBloodStock();
                     });
                 }
+
+                // Listen for contract events
+                if (bloodBankContract) {
+                    bloodBankContract.events.BloodDonated({}, async function(error, event) {
+                        if (error) {
+                            console.error('Error in BloodDonated event:', error);
+                            return;
+                        }
+                        await updateBloodStock();
+                    });
+
+                    bloodBankContract.events.BloodRequested({}, async function(error, event) {
+                        if (error) {
+                            console.error('Error in BloodRequested event:', error);
+                            return;
+                        }
+                        await updateBloodStock();
+                    });
+                }
+
             } catch (error) {
                 console.error('Error initializing:', error);
             }
