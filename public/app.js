@@ -1852,13 +1852,18 @@ async function displayStoredDonationDetails() {
                     const donationData = JSON.parse(localStorage.getItem(key));
                     donations.push({
                         ...donationData,
-                        timestamp: parseInt(key.split('_')[1])
+                        timestamp: parseInt(donationData.timestamp)
                     });
                 }
             }
 
             // Sort donations by timestamp (newest first)
             donations.sort((a, b) => b.timestamp - a.timestamp);
+
+            // Clear QR code container
+            if (qrCodeContainer) {
+                qrCodeContainer.innerHTML = '';
+            }
 
             // Display donations and update statistics
             for (const donation of donations) {
@@ -1885,6 +1890,102 @@ async function displayStoredDonationDetails() {
                 if (!bloodType) {
                     bloodType = donation.bloodType;
                 }
+
+                // Generate QR code for each donation
+                if (qrCodeContainer) {
+                    const qrWrapper = document.createElement('div');
+                    qrWrapper.style.cssText = `
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        padding: 20px;
+                        background: #f8f9fa;
+                        border-radius: 10px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        margin: 20px 0;
+                    `;
+                    
+                    // Add title with donation date
+                    const title = document.createElement('h4');
+                    title.textContent = `Blood Donation QR Code - ${new Date(donation.timestamp).toLocaleDateString()}`;
+                    title.style.cssText = `
+                        margin-bottom: 15px;
+                        color: #2c3e50;
+                        font-weight: 600;
+                    `;
+                    qrWrapper.appendChild(title);
+                    
+                    // Create canvas element for QR code
+                    const canvas = document.createElement('canvas');
+                    canvas.style.cssText = `
+                        background: white;
+                        padding: 10px;
+                        border-radius: 5px;
+                        margin-bottom: 15px;
+                    `;
+                    qrWrapper.appendChild(canvas);
+                    
+                    // Generate QR code
+                    await QRCode.toCanvas(canvas, JSON.stringify(donation), {
+                        width: 200,
+                        margin: 1,
+                        color: {
+                            dark: '#000000',
+                            light: '#ffffff'
+                        }
+                    });
+
+                    // Add download button
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.textContent = 'Download QR Code';
+                    downloadBtn.className = 'btn btn-primary';
+                    downloadBtn.style.cssText = `
+                        padding: 8px 20px;
+                        font-size: 14px;
+                        border-radius: 5px;
+                        background-color: #007bff;
+                        border: none;
+                        color: white;
+                        cursor: pointer;
+                        transition: background-color 0.3s ease;
+                        margin-top: 10px;
+                    `;
+                    
+                    downloadBtn.onclick = () => {
+                        const link = document.createElement('a');
+                        link.download = `blood-donation-${donation.donationId}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                    };
+                    
+                    // Add hover effect
+                    downloadBtn.onmouseover = () => {
+                        downloadBtn.style.backgroundColor = '#0056b3';
+                    };
+                    downloadBtn.onmouseout = () => {
+                        downloadBtn.style.backgroundColor = '#007bff';
+                    };
+                    
+                    qrWrapper.appendChild(downloadBtn);
+                    
+                    // Add donation details
+                    const detailsDiv = document.createElement('div');
+                    detailsDiv.style.cssText = `
+                        margin-top: 15px;
+                        text-align: center;
+                        color: #666;
+                        font-size: 14px;
+                    `;
+                    detailsDiv.innerHTML = `
+                        <p><strong>Donation ID:</strong> ${donation.donationId}</p>
+                        <p><strong>Blood Type:</strong> ${donation.bloodType}</p>
+                        <p><strong>Amount:</strong> ${donation.amount} units</p>
+                        <p><strong>Date:</strong> ${new Date(donation.timestamp).toLocaleDateString()}</p>
+                    `;
+                    qrWrapper.appendChild(detailsDiv);
+                    
+                    qrCodeContainer.appendChild(qrWrapper);
+                }
             }
     
             // Display the total amount
@@ -1905,106 +2006,6 @@ async function displayStoredDonationDetails() {
             // Display blood type
             if (bloodTypeElement) {
                 bloodTypeElement.textContent = bloodType || 'Not specified';
-            }
-
-            // Generate QR code for the most recent donation
-            if (lastDonation && qrCodeContainer) {
-                // Clear existing QR code
-                qrCodeContainer.innerHTML = '';
-                
-                // Create a wrapper div for better styling
-                const qrWrapper = document.createElement('div');
-                qrWrapper.style.cssText = `
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    padding: 20px;
-                    background: #f8f9fa;
-                    border-radius: 10px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    margin: 20px 0;
-                `;
-                
-                // Add title
-                const title = document.createElement('h4');
-                title.textContent = 'Blood Donation QR Code';
-                title.style.cssText = `
-                    margin-bottom: 15px;
-                    color: #2c3e50;
-                    font-weight: 600;
-                `;
-                qrWrapper.appendChild(title);
-                
-                // Create canvas element for QR code
-                const canvas = document.createElement('canvas');
-                canvas.style.cssText = `
-                    background: white;
-                    padding: 10px;
-                    border-radius: 5px;
-                    margin-bottom: 15px;
-                `;
-                qrWrapper.appendChild(canvas);
-                
-                // Generate QR code
-                await QRCode.toCanvas(canvas, JSON.stringify(lastDonation), {
-                    width: 200,
-                    margin: 1,
-                    color: {
-                        dark: '#000000',
-                        light: '#ffffff'
-                    }
-                });
-
-                // Add download button with improved styling
-                const downloadBtn = document.createElement('button');
-                downloadBtn.textContent = 'Download QR Code';
-                downloadBtn.className = 'btn btn-primary';
-                downloadBtn.style.cssText = `
-                    padding: 8px 20px;
-                    font-size: 14px;
-                    border-radius: 5px;
-                    background-color: #007bff;
-                    border: none;
-                    color: white;
-                    cursor: pointer;
-                    transition: background-color 0.3s ease;
-                    margin-top: 10px;
-                `;
-                
-                downloadBtn.onclick = () => {
-                    const link = document.createElement('a');
-                    link.download = `blood-donation-${lastDonation.donationId}.png`;
-                    link.href = canvas.toDataURL('image/png');
-                    link.click();
-                };
-                
-                // Add hover effect
-                downloadBtn.onmouseover = () => {
-                    downloadBtn.style.backgroundColor = '#0056b3';
-                };
-                downloadBtn.onmouseout = () => {
-                    downloadBtn.style.backgroundColor = '#007bff';
-                };
-                
-                qrWrapper.appendChild(downloadBtn);
-                
-                // Add donation details below
-                const detailsDiv = document.createElement('div');
-                detailsDiv.style.cssText = `
-                    margin-top: 15px;
-                    text-align: center;
-                    color: #666;
-                    font-size: 14px;
-                `;
-                detailsDiv.innerHTML = `
-                    <p><strong>Donation ID:</strong> ${lastDonation.donationId}</p>
-                    <p><strong>Blood Type:</strong> ${lastDonation.bloodType}</p>
-                    <p><strong>Amount:</strong> ${lastDonation.amount} units</p>
-                    <p><strong>Date:</strong> ${new Date(lastDonation.timestamp).toLocaleDateString()}</p>
-                `;
-                qrWrapper.appendChild(detailsDiv);
-                
-                qrCodeContainer.appendChild(qrWrapper);
             }
         } else {
             console.error('Element with ID "donationDetailsList" not found.');
