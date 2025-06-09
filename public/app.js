@@ -2,49 +2,157 @@ let web3;
 let bloodBankContract;
 let isInitialized = false;
 
+// Global variable to store location
+let donorLocation = null;
+
 // Initialize Web3 and contract
 async function initWeb3() {
     try {
         // Check if MetaMask is installed
-if (typeof window.ethereum !== 'undefined') {
+        if (typeof window.ethereum !== 'undefined') {
+            console.log('MetaMask is installed');
+            
             // Request account access
             const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            console.log('Connected accounts:', accounts);
+            
             if (!accounts || accounts.length === 0) {
                 throw new Error('No accounts found');
             }
             
-    web3 = new Web3(window.ethereum);
+            web3 = new Web3(window.ethereum);
+            
+            // Get the current network and chain ID
+            const networkId = await web3.eth.net.getId();
+            const chainId = await web3.eth.getChainId();
+            console.log('Connected to network ID:', networkId);
+            console.log('Chain ID:', chainId);
             
             // Initialize contract
-            const contractAddress = '0x3a9227BeFBe723f78Ea463AF0D993B34B603494F';
+            const contractAddress = '0xEbe8Ad8943e5008D0212F4534f1A2Ef51BE46d27';
+            console.log('Attempting to connect to contract at:', contractAddress);
+            
+            // Check if the contract exists at the specified address
+            const code = await web3.eth.getCode(contractAddress);
+            console.log('Contract code length:', code.length);
+            console.log('Contract code (first 100 chars):', code.substring(0, 100));
+            
+            if (code === '0x' || code === '') {
+                throw new Error('No contract found at the specified address. Please make sure the contract is deployed correctly.');
+            }
+            
+            // Log the ABI being used
+            console.log('Contract ABI:', JSON.stringify(contractABI));
+            
             bloodBankContract = new web3.eth.Contract(contractABI, contractAddress);
             
             // Verify contract is initialized
             try {
-                await bloodBankContract.methods.bloodInventory(0).call();
+                // Try to get the admin address first (this should always exist)
+                console.log('Attempting to call admin()...');
+                const admin = await bloodBankContract.methods.admin().call();
+                console.log('Admin address:', admin);
+                
+                // Then try to get blood inventory
+                console.log('Attempting to call bloodInventory(0)...');
+                const bloodInventory = await bloodBankContract.methods.bloodInventory(0).call();
+                console.log('Blood inventory for type A:', bloodInventory);
+                
                 console.log('Contract initialized successfully');
                 isInitialized = true;
                 return true;
             } catch (error) {
                 console.error('Contract initialization failed:', error);
-                alert('Contract not found at the specified address. Please make sure the contract is deployed correctly.');
+                console.error('Error details:', {
+                    message: error.message,
+                    code: error.code,
+                    data: error.data,
+                    stack: error.stack
+                });
+                
+                // Check if it's a network mismatch
+                if (error.message.includes('network')) {
+                    alert('Network mismatch. Please make sure you are connected to the correct network in MetaMask.');
+                } else if (error.message.includes('gas')) {
+                    alert('Gas estimation failed. Please check if the contract is deployed correctly.');
+                } else {
+                    alert('Contract initialization failed: ' + error.message);
+                }
                 return false;
             }
-} else {
+        } else {
             alert("Please install MetaMask to use this application.");
             return false;
         }
     } catch (error) {
         console.error('Error initializing Web3:', error);
-        alert('Error connecting to MetaMask. Please make sure MetaMask is installed and connected to the correct network.');
+        console.error('Full error:', error);
+        alert('Error connecting to MetaMask: ' + error.message);
         return false;
     }
 }
 
+// Add network change handler
+if (window.ethereum) {
+    window.ethereum.on('chainChanged', (chainId) => {
+        console.log('Network changed to:', chainId);
+        window.location.reload();
+    });
+    
+    window.ethereum.on('accountsChanged', (accounts) => {
+        console.log('Account changed to:', accounts[0]);
+        window.location.reload();
+    });
+}
+
+// Add a button to check chain ID and contract status
+async function checkContractStatus() {
+    try {
+        const chainId = await web3.eth.getChainId();
+        console.log('Current Chain ID:', chainId);
+        
+        const code = await web3.eth.getCode(contractAddress);
+        console.log('Contract code exists:', code !== '0x' && code !== '');
+        
+        alert(`Chain ID: ${chainId}\nContract exists: ${code !== '0x' && code !== ''}`);
+    } catch (error) {
+        console.error('Error checking contract status:', error);
+        alert('Error checking contract status: ' + error.message);
+    }
+}
+
+// Function to add status button
+function addStatusButton() {
+    console.log('Adding status button...');
+    const statusButton = document.createElement('button');
+    statusButton.textContent = 'Check Contract Status';
+    statusButton.onclick = checkContractStatus;
+    statusButton.style.position = 'fixed';
+    statusButton.style.top = '10px';
+    statusButton.style.right = '10px';
+    statusButton.style.zIndex = '1000';
+    statusButton.style.padding = '10px';
+    statusButton.style.backgroundColor = '#4CAF50';
+    statusButton.style.color = 'white';
+    statusButton.style.border = 'none';
+    statusButton.style.borderRadius = '5px';
+    statusButton.style.cursor = 'pointer';
+    document.body.appendChild(statusButton);
+    console.log('Status button added');
+}
+
 // Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM Content Loaded');
+    addStatusButton();
+});
+
 window.addEventListener('load', async () => {
+    console.log('Window loaded');
     try {
         await initWeb3();
+        console.log('Web3 initialized');
+        
         // Only call displayBloodStock if we're on the blood stock page
         if (document.getElementById('bloodTypeA')) {
             await displayBloodStock();
@@ -65,9 +173,21 @@ async function ensureInitialized() {
         }
     }
 }
+// Add this function to check chain ID
+async function checkChainId() {
+    try {
+        const chainId = await web3.eth.getChainId();
+        console.log('Current Chain ID:', chainId);
+        alert('Current Chain ID: ' + chainId);
+        return chainId;
+    } catch (error) {
+        console.error('Error getting chain ID:', error);
+        return null;
+    }
+}
 
 // Contract Address and ABI (replace with your actual deployed contract address and ABI)
-const contractAddress = '0x3a9227BeFBe723f78Ea463AF0D993B34B603494F';
+const contractAddress = '0xEbe8Ad8943e5008D0212F4534f1A2Ef51BE46d27';
 const contractABI = [
 	{
 		"inputs": [],
@@ -1142,7 +1262,9 @@ async function isValidAdminAddress(adminAddress) {
 }
 
 // Function to register a donor
-async function registerDonor() {
+async function registerDonor(event) {
+    event.preventDefault();
+    
     try {
         await ensureInitialized();
         
@@ -1152,12 +1274,18 @@ async function registerDonor() {
 
         if (!name || !age || !bloodType) {
             alert('Please fill in all fields');
-            return;
+            return false;
         }
 
         if (age < 18 || age > 65) {
             alert('Age must be between 18 and 65 years');
-            return;
+            return false;
+        }
+
+        // Check if location was captured
+        if (!donorLocation) {
+            alert('Please capture your location first');
+            return false;
         }
 
         const accounts = await web3.eth.getAccounts();
@@ -1167,17 +1295,210 @@ async function registerDonor() {
         const bloodTypeMap = { 'A': 0, 'B': 1, 'AB': 2, 'O': 3 };
         const bloodTypeNumeric = bloodTypeMap[bloodType];
 
-        // Register the donor
+        // Store donor location in localStorage
+        const donorData = {
+            address: donorAddress,
+            latitude: donorLocation.latitude,
+            longitude: donorLocation.longitude,
+            name: name,
+            bloodType: bloodType
+        };
+        localStorage.setItem(`donor_${donorAddress}`, JSON.stringify(donorData));
+
+        // Register the donor on the blockchain
         await bloodBankContract.methods.registerAsDonor(name, bloodTypeNumeric)
             .send({ from: donorAddress });
 
         alert('Donor registration successful! Please wait for admin approval.');
         window.location.href = 'donor_login.html';
+        return false;
     } catch (error) {
         console.error('Error registering donor:', error);
         alert('Error registering donor: ' + error.message);
+        return false;
     }
 }
+
+// Function to search for nearby donors
+async function searchNearbyDonors() {
+    try {
+        // Get patient's current location
+        const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+        const patientLat = position.coords.latitude;
+        const patientLng = position.coords.longitude;
+
+        // Get all donors from localStorage
+        const donors = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith('donor_')) {
+                const donor = JSON.parse(localStorage.getItem(key));
+                donors.push(donor);
+            }
+        }
+
+        // Calculate distances and sort donors
+        const donorsWithDistance = donors.map(donor => {
+            const distance = calculateDistance(
+                patientLat,
+                patientLng,
+                donor.latitude,
+                donor.longitude
+            );
+            return { ...donor, distance };
+        });
+
+        // Sort by distance
+        donorsWithDistance.sort((a, b) => a.distance - b.distance);
+
+        // Display results
+        displayDonorResults(donorsWithDistance);
+    } catch (error) {
+        console.error('Error searching for donors:', error);
+        alert('Error searching for donors: ' + error.message);
+    }
+}
+
+// Function to calculate distance between two points using Haversine formula
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of the earth in km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c; // Distance in km
+    return distance;
+}
+
+function deg2rad(deg) {
+    return deg * (Math.PI / 180);
+}
+
+// Function to display donor results
+function displayDonorResults(donors) {
+    const resultsDiv = document.getElementById('donorResults');
+    if (!resultsDiv) return;
+
+    resultsDiv.innerHTML = '';
+
+    // Create map container
+    const mapContainer = document.createElement('div');
+    mapContainer.id = 'map';
+    mapContainer.style.height = '400px';
+    mapContainer.style.marginBottom = '20px';
+    resultsDiv.appendChild(mapContainer);
+
+    // Initialize map
+    const map = new google.maps.Map(mapContainer, {
+        zoom: 12,
+        center: { lat: donors[0]?.latitude || 0, lng: donors[0]?.longitude || 0 }
+    });
+
+    // Add markers for each donor
+    donors.forEach(donor => {
+        const marker = new google.maps.Marker({
+            position: { lat: donor.latitude, lng: donor.longitude },
+            map: map,
+            title: `${donor.name} (${donor.bloodType})`
+        });
+
+        // Add info window
+        const infoWindow = new google.maps.InfoWindow({
+            content: `
+                <div>
+                    <h3>${donor.name}</h3>
+                    <p>Blood Type: ${donor.bloodType}</p>
+                    <p>Distance: ${donor.distance.toFixed(2)} km</p>
+                    <button onclick="requestBloodFromDonor('${donor.address}')">Request Blood</button>
+                </div>
+            `
+        });
+
+        marker.addListener('click', () => {
+            infoWindow.open(map, marker);
+        });
+    });
+
+    // Create list of donors
+    const donorList = document.createElement('div');
+    donorList.className = 'donor-list';
+    donors.forEach(donor => {
+        const donorCard = document.createElement('div');
+        donorCard.className = 'donor-card';
+        donorCard.innerHTML = `
+            <h3>${donor.name}</h3>
+            <p>Blood Type: ${donor.bloodType}</p>
+            <p>Distance: ${donor.distance.toFixed(2)} km</p>
+            <button onclick="requestBloodFromDonor('${donor.address}')">Request Blood</button>
+        `;
+        donorList.appendChild(donorCard);
+    });
+    resultsDiv.appendChild(donorList);
+}
+
+// Function to request blood from a specific donor
+async function requestBloodFromDonor(donorAddress) {
+    try {
+        const bloodType = prompt('Enter blood type (A, B, AB, O):');
+        const amount = parseInt(prompt('Enter the amount of blood requested:'));
+
+        if (!bloodType || isNaN(amount)) {
+            alert('Please enter valid blood type and amount');
+            return;
+        }
+
+        const bloodTypeMap = { 'A': 0, 'B': 1, 'AB': 2, 'O': 3 };
+        const bloodTypeNumeric = bloodTypeMap[bloodType.toUpperCase()];
+
+        // Get patient address
+        const accounts = await web3.eth.getAccounts();
+        const patientAddress = accounts[0];
+
+        // Call the smart contract function for blood request
+        await bloodBankContract.methods.requestBlood(bloodTypeNumeric, amount)
+            .send({ from: patientAddress });
+
+        alert('Blood request sent successfully!');
+    } catch (error) {
+        console.error('Error requesting blood:', error);
+        alert('Error requesting blood: ' + error.message);
+    }
+}
+
+// Add this to your HTML file where you want to show the donor search interface
+function addDonorSearchInterface() {
+    const searchContainer = document.createElement('div');
+    searchContainer.innerHTML = `
+        <div class="search-container">
+            <h2>Find Nearby Donors</h2>
+            <button onclick="searchNearbyDonors()" class="search-button">Search Nearby Donors</button>
+            <div id="donorResults"></div>
+        </div>
+    `;
+    document.body.appendChild(searchContainer);
+}
+
+// Add this to your HTML file's head section
+function addGoogleMapsScript() {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyBteTYgV4PeMFPBvB9NGs-1tyjw6L17dI8`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+}
+
+// Initialize the search interface when the page loads
+window.addEventListener('load', () => {
+    if (document.getElementById('donorSearch')) {
+        addDonorSearchInterface();
+        addGoogleMapsScript();
+    }
+});
 
 // Function to register a patient
 async function registerPatient() {
@@ -1974,3 +2295,287 @@ async function initializeBloodStock() {
 
 // Update blood stock on page load
 window.addEventListener('load', initializeBloodStock);
+
+// Function to search for nearby donors
+async function searchNearbyDonors() {
+    try {
+        // Get patient's current location
+        const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+        const patientLat = position.coords.latitude;
+        const patientLng = position.coords.longitude;
+
+        // Get all donors from localStorage
+        const donors = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith('donor_')) {
+                const donor = JSON.parse(localStorage.getItem(key));
+                donors.push(donor);
+            }
+        }
+
+        // Calculate distances and sort donors
+        const donorsWithDistance = donors.map(donor => {
+            const distance = calculateDistance(
+                patientLat,
+                patientLng,
+                donor.latitude,
+                donor.longitude
+            );
+            return { ...donor, distance };
+        });
+
+        // Sort by distance
+        donorsWithDistance.sort((a, b) => a.distance - b.distance);
+
+        // Display results
+        displayDonorResults(donorsWithDistance);
+    } catch (error) {
+        console.error('Error searching for donors:', error);
+        alert('Error searching for donors: ' + error.message);
+    }
+}
+
+// Function to calculate distance between two points using Haversine formula
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of the earth in km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c; // Distance in km
+    return distance;
+}
+
+function deg2rad(deg) {
+    return deg * (Math.PI / 180);
+}
+
+// Function to display donor results
+function displayDonorResults(donors) {
+    const resultsDiv = document.getElementById('donorResults');
+    if (!resultsDiv) return;
+
+    resultsDiv.innerHTML = '';
+
+    // Create map container
+    const mapContainer = document.createElement('div');
+    mapContainer.id = 'map';
+    mapContainer.style.height = '400px';
+    mapContainer.style.marginBottom = '20px';
+    resultsDiv.appendChild(mapContainer);
+
+    // Initialize map
+    const map = new google.maps.Map(mapContainer, {
+        zoom: 12,
+        center: { lat: donors[0]?.latitude || 0, lng: donors[0]?.longitude || 0 }
+    });
+
+    // Add markers for each donor
+    donors.forEach(donor => {
+        const marker = new google.maps.Marker({
+            position: { lat: donor.latitude, lng: donor.longitude },
+            map: map,
+            title: `${donor.name} (${donor.bloodType})`
+        });
+
+        // Add info window
+        const infoWindow = new google.maps.InfoWindow({
+            content: `
+                <div>
+                    <h3>${donor.name}</h3>
+                    <p>Blood Type: ${donor.bloodType}</p>
+                    <p>Distance: ${donor.distance.toFixed(2)} km</p>
+                    <button onclick="requestBloodFromDonor('${donor.address}')">Request Blood</button>
+                </div>
+            `
+        });
+
+        marker.addListener('click', () => {
+            infoWindow.open(map, marker);
+        });
+    });
+
+    // Create list of donors
+    const donorList = document.createElement('div');
+    donorList.className = 'donor-list';
+    donors.forEach(donor => {
+        const donorCard = document.createElement('div');
+        donorCard.className = 'donor-card';
+        donorCard.innerHTML = `
+            <h3>${donor.name}</h3>
+            <p>Blood Type: ${donor.bloodType}</p>
+            <p>Distance: ${donor.distance.toFixed(2)} km</p>
+            <button onclick="requestBloodFromDonor('${donor.address}')">Request Blood</button>
+        `;
+        donorList.appendChild(donorCard);
+    });
+    resultsDiv.appendChild(donorList);
+}
+
+// Function to request blood from a specific donor
+async function requestBloodFromDonor(donorAddress) {
+    try {
+        const bloodType = prompt('Enter blood type (A, B, AB, O):');
+        const amount = parseInt(prompt('Enter the amount of blood requested:'));
+
+        if (!bloodType || isNaN(amount)) {
+            alert('Please enter valid blood type and amount');
+            return;
+        }
+
+        const bloodTypeMap = { 'A': 0, 'B': 1, 'AB': 2, 'O': 3 };
+        const bloodTypeNumeric = bloodTypeMap[bloodType.toUpperCase()];
+
+        // Get patient address
+        const accounts = await web3.eth.getAccounts();
+        const patientAddress = accounts[0];
+
+        // Call the smart contract function for blood request
+        await bloodBankContract.methods.requestBlood(bloodTypeNumeric, amount)
+            .send({ from: patientAddress });
+
+        alert('Blood request sent successfully!');
+    } catch (error) {
+        console.error('Error requesting blood:', error);
+        alert('Error requesting blood: ' + error.message);
+    }
+}
+
+// Add this to your HTML file where you want to show the donor search interface
+function addDonorSearchInterface() {
+    const searchContainer = document.createElement('div');
+    searchContainer.innerHTML = `
+        <div class="search-container">
+            <h2>Find Nearby Donors</h2>
+            <button onclick="searchNearbyDonors()" class="search-button">Search Nearby Donors</button>
+            <div id="donorResults"></div>
+        </div>
+    `;
+    document.body.appendChild(searchContainer);
+}
+
+// Add this to your HTML file's head section
+function addGoogleMapsScript() {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyBteTYgV4PeMFPBvB9NGs-1tyjw6L17dI8`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+}
+
+// Initialize the search interface when the page loads
+window.addEventListener('load', () => {
+    if (document.getElementById('donorSearch')) {
+        addDonorSearchInterface();
+        addGoogleMapsScript();
+    }
+});
+
+// Function to get user's location
+async function getLocation() {
+    const locationStatus = document.getElementById('locationStatus');
+    const mapDiv = document.getElementById('donorMap');
+    
+    if (!locationStatus || !mapDiv) {
+        console.error('Location status or map elements not found');
+        return false;
+    }
+
+    try {
+        const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0
+            });
+        });
+
+        const { latitude, longitude } = position.coords;
+        donorLocation = { latitude, longitude };
+
+        // Show success message
+        locationStatus.className = 'location-status success';
+        locationStatus.textContent = 'Location captured successfully!';
+
+        // Show map
+        mapDiv.style.display = 'block';
+        const map = new google.maps.Map(mapDiv, {
+            center: { lat: latitude, lng: longitude },
+            zoom: 15
+        });
+
+        // Add marker
+        new google.maps.Marker({
+            position: { lat: latitude, lng: longitude },
+            map: map,
+            title: 'Your Location'
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Error getting location:', error);
+        locationStatus.className = 'location-status error';
+        locationStatus.textContent = 'Error getting location. Please enable location services and try again.';
+        return false;
+    }
+}
+
+// Function to register a donor
+async function registerDonor() {
+    try {
+        await ensureInitialized();
+        
+        const name = document.getElementById('donorName').value;
+        const age = document.getElementById('donorAge').value;
+        const bloodType = document.getElementById('donorBloodType').value;
+
+        if (!name || !age || !bloodType) {
+            alert('Please fill in all fields');
+            return;
+        }
+
+        if (age < 18 || age > 65) {
+            alert('Age must be between 18 and 65 years');
+            return;
+        }
+
+        // Check if location was captured
+        if (!donorLocation) {
+            alert('Please capture your location first');
+            return;
+        }
+
+        const accounts = await web3.eth.getAccounts();
+        const donorAddress = accounts[0];
+
+        // Map blood type string to numeric value
+        const bloodTypeMap = { 'A': 0, 'B': 1, 'AB': 2, 'O': 3 };
+        const bloodTypeNumeric = bloodTypeMap[bloodType];
+
+        // Store donor location in localStorage
+        const donorData = {
+            address: donorAddress,
+            latitude: donorLocation.latitude,
+            longitude: donorLocation.longitude,
+            name: name,
+            bloodType: bloodType
+        };
+        localStorage.setItem(`donor_${donorAddress}`, JSON.stringify(donorData));
+
+        // Register the donor on the blockchain
+        await bloodBankContract.methods.registerAsDonor(name, bloodTypeNumeric)
+            .send({ from: donorAddress });
+
+        alert('Donor registration successful! Please wait for admin approval.');
+        window.location.href = 'donor_login.html';
+    } catch (error) {
+        console.error('Error registering donor:', error);
+        alert('Error registering donor: ' + error.message);
+    }
+}
