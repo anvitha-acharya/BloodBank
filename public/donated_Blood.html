@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blood Stock - Blood Bank Management System</title>
+    <title>Available Blood Stock - Blood Bank Management System</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <style>
@@ -73,7 +73,7 @@
                     <h3>Blood Type AB</h3>
                     <p class="number" id="bloodTypeAB">0</p>
                     <p>units available</p>
-</div>
+                </div>
 
                 <div class="stat-card">
                     <h3>Blood Type O</h3>
@@ -127,26 +127,26 @@
                 </div>
             </div>
         </div>
-</div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
     <script src="app.js"></script>
-<script>
+    <script>
         // Update blood stock information
         async function updateBloodStock() {
             try {
-                if (!web3 || !bloodBankContract) {
-                    const initialized = await initWeb3();
-                    if (!initialized) {
+                if (!isInitialized) {
+                    const success = await initWeb3();
+                    if (!success) {
                         throw new Error('Failed to initialize Web3');
                     }
                 }
 
                 // Get blood stock counts
-                const bloodTypeA = await bloodBankContract.methods.getBloodTypeCount(0).call();
-                const bloodTypeB = await bloodBankContract.methods.getBloodTypeCount(1).call();
-                const bloodTypeAB = await bloodBankContract.methods.getBloodTypeCount(2).call();
-                const bloodTypeO = await bloodBankContract.methods.getBloodTypeCount(3).call();
+                const bloodTypeA = await bloodBankContract.methods.bloodInventory(0).call();
+                const bloodTypeB = await bloodBankContract.methods.bloodInventory(1).call();
+                const bloodTypeAB = await bloodBankContract.methods.bloodInventory(2).call();
+                const bloodTypeO = await bloodBankContract.methods.bloodInventory(3).call();
 
                 // Update the display
                 document.getElementById('bloodTypeA').textContent = bloodTypeA;
@@ -155,65 +155,80 @@
                 document.getElementById('bloodTypeO').textContent = bloodTypeO;
 
                 // Get recent donations
-                const result = await bloodBankContract.methods.getRegisteredUsers().call();
-                const registeredDonors = result[0];
                 const donationsList = document.getElementById('donationsList');
                 donationsList.innerHTML = '';
 
-                const bloodTypes = ['A', 'B', 'AB', 'O'];
-                let hasDonations = false;
-
-                // Get all donations
-                const allDonations = [];
-                for (const donorAddress of registeredDonors) {
-                    const donor = await bloodBankContract.methods.donors(donorAddress).call();
-                    if (donor.isRegistered) {
-                        for (let bloodType = 0; bloodType < 4; bloodType++) {
-                            const donations = await bloodBankContract.methods.getDonorDonations(donorAddress, bloodType).call();
-                            if (donations.length > 0) {
-                                hasDonations = true;
-                                donations.forEach(donation => {
-                                    allDonations.push({
-                                        donorName: donor.name,
-                                        bloodType: bloodTypes[donation.bloodType],
-                                        amount: donation.amount,
-                                        timestamp: donation.timestamp
-                                    });
+                // Get all donation entries and sort them by timestamp
+                const donations = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key.startsWith('donation_')) {
+                        try {
+                            const donationData = JSON.parse(localStorage.getItem(key));
+                            if (donationData && donationData.donorAddress && donationData.bloodType && donationData.amount) {
+                                donations.push({
+                                    ...donationData,
+                                    timestamp: parseInt(key.split('_')[1])
                                 });
                             }
+                        } catch (error) {
+                            console.error('Error parsing donation data:', error);
                         }
                     }
                 }
 
-                // Sort donations by timestamp (most recent first)
-                allDonations.sort((a, b) => b.timestamp - a.timestamp);
+                // Sort donations by timestamp (newest first)
+                donations.sort((a, b) => b.timestamp - a.timestamp);
 
                 // Display donations
-                if (hasDonations) {
-                    allDonations.forEach(donation => {
+                if (donations.length > 0) {
+                    donations.forEach(donation => {
                         const row = document.createElement('tr');
                         row.innerHTML = `
-                            <td>${donation.donorName}</td>
+                            <td>${donation.donorAddress}</td>
                             <td>${donation.bloodType}</td>
                             <td>${donation.amount} units</td>
-                            <td>${new Date(donation.timestamp * 1000).toLocaleDateString()}</td>
+                            <td>${new Date(donation.timestamp).toLocaleDateString()}</td>
                         `;
                         donationsList.appendChild(row);
                     });
                 } else {
                     donationsList.innerHTML = '<tr><td colspan="4" style="text-align: center;">No donations found</td></tr>';
                 }
-        } catch (error) {
+
+            } catch (error) {
                 console.error('Error fetching blood stock:', error);
                 alert('Error loading blood stock information. Please make sure MetaMask is connected and you are on the correct network.');
             }
         }
 
-        // Update on page load
-        window.addEventListener('load', updateBloodStock);
+        // Initialize on page load
+        window.addEventListener('load', async () => {
+            try {
+                await initWeb3();
+                await updateBloodStock();
+                
+                // Update every 5 seconds
+                setInterval(updateBloodStock, 5000);
 
-        // Update every 30 seconds
-        setInterval(updateBloodStock, 30000);
-</script>
+                // Listen for account changes
+                if (window.ethereum) {
+                    window.ethereum.on('accountsChanged', async function (accounts) {
+                        if (accounts.length === 0) {
+                            return;
+                        }
+                        await updateBloodStock();
+                    });
+
+                    // Listen for network changes
+                    window.ethereum.on('chainChanged', async function (chainId) {
+                        await updateBloodStock();
+                    });
+                }
+            } catch (error) {
+                console.error('Error initializing:', error);
+            }
+        });
+    </script>
 </body>
 </html>

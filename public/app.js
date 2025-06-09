@@ -8,7 +8,11 @@ async function initWeb3() {
         // Check if MetaMask is installed
         if (typeof window.ethereum !== 'undefined') {
             // Request account access
-            await window.ethereum.request({ method: 'eth_requestAccounts' });
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            if (!accounts || accounts.length === 0) {
+                throw new Error('No accounts found');
+            }
+            
             web3 = new Web3(window.ethereum);
             
             // Initialize contract
@@ -17,7 +21,7 @@ async function initWeb3() {
             
             // Verify contract is initialized
             try {
-                await bloodBankContract.methods.getBloodInventory(0).call();
+                await bloodBankContract.methods.bloodInventory(0).call();
                 console.log('Contract initialized successfully');
                 isInitialized = true;
                 return true;
@@ -39,7 +43,17 @@ async function initWeb3() {
 
 // Initialize on page load
 window.addEventListener('load', async () => {
-    await initWeb3();
+    try {
+        await initWeb3();
+        // Only call displayBloodStock if we're on the blood stock page
+        if (document.getElementById('bloodTypeA')) {
+            await displayBloodStock();
+            // Update every 30 seconds
+            setInterval(displayBloodStock, 30000);
+        }
+    } catch (error) {
+        console.error('Error initializing:', error);
+    }
 });
 
 // Helper function to ensure contract is initialized
@@ -1881,3 +1895,82 @@ function removeDonation(donorAddress, bloodType, amount) {
     // Refresh the display
     displayStoredDonationDetails();
 }
+
+// Function to display blood stock information
+async function displayBloodStock() {
+    try {
+        // Only proceed if we're on the blood stock page
+        if (!document.getElementById('bloodTypeA')) {
+            return;
+        }
+
+        // Ensure contract is initialized
+        if (!isInitialized) {
+            const success = await initWeb3();
+            if (!success) {
+                throw new Error('Failed to initialize Web3');
+            }
+        }
+
+        // Get blood stock counts using bloodInventory mapping
+        const [bloodTypeA, bloodTypeB, bloodTypeAB, bloodTypeO] = await Promise.all([
+            bloodBankContract.methods.bloodInventory(0).call(),
+            bloodBankContract.methods.bloodInventory(1).call(),
+            bloodBankContract.methods.bloodInventory(2).call(),
+            bloodBankContract.methods.bloodInventory(3).call()
+        ]);
+
+        // Update the display
+        document.getElementById('bloodTypeA').textContent = bloodTypeA;
+        document.getElementById('bloodTypeB').textContent = bloodTypeB;
+        document.getElementById('bloodTypeAB').textContent = bloodTypeAB;
+        document.getElementById('bloodTypeO').textContent = bloodTypeO;
+
+        // Set up event listeners for real-time updates
+        if (window.ethereum) {
+            // Remove existing listeners to prevent duplicates
+            window.ethereum.removeAllListeners('accountsChanged');
+            window.ethereum.removeAllListeners('chainChanged');
+
+            // Listen for account changes
+            window.ethereum.on('accountsChanged', async function (accounts) {
+                if (accounts.length === 0) {
+                    // MetaMask is locked or user has not connected any accounts
+                    return;
+                }
+                await displayBloodStock();
+            });
+
+            // Listen for network changes
+            window.ethereum.on('chainChanged', async function (chainId) {
+                await displayBloodStock();
+            });
+        }
+
+    } catch (error) {
+        console.error('Error loading blood stock:', error);
+        // Only show error if we're on the blood stock page
+        if (document.getElementById('bloodTypeA')) {
+            const errorMessage = error.message.includes('MetaMask is not installed') 
+                ? 'Please install MetaMask to view blood stock information.'
+                : 'Error loading blood stock information. Please make sure MetaMask is connected and you are on the correct network.';
+            alert(errorMessage);
+        }
+    }
+}
+
+// Initialize and update blood stock
+async function initializeBloodStock() {
+    try {
+        // Initial display
+        await displayBloodStock();
+        
+        // Update every 10 seconds
+        setInterval(displayBloodStock, 10000);
+    } catch (error) {
+        console.error('Error initializing blood stock:', error);
+    }
+}
+
+// Update blood stock on page load
+window.addEventListener('load', initializeBloodStock);
