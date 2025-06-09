@@ -1179,8 +1179,9 @@ async function registerPatient() {
             return;
         }
 
-        // Use the correct Ganache address
-        const patientAddress = '0x21f49D3476000345c34E214741cADee8317ead94';
+        // Get the currently selected account from MetaMask
+        const accounts = await web3.eth.getAccounts();
+        const patientAddress = accounts[0];
 
         // Map blood type string to numeric value
         const bloodTypeMap = { 'A': 0, 'B': 1, 'AB': 2, 'O': 3 };
@@ -1190,13 +1191,8 @@ async function registerPatient() {
         await bloodBankContract.methods.registerAsPatient(name, bloodTypeNumeric)
             .send({ from: patientAddress });
 
-        // Store the patient address
-        localStorage.setItem('patientAddress', patientAddress);
-        localStorage.setItem('userAddress', patientAddress);
-        localStorage.setItem('userType', 'patient');
-
         alert('Patient registration successful! Please wait for admin approval.');
-        window.location.href = 'patient_dashboard.html';
+        window.location.href = 'patient_login.html';
     } catch (error) {
         console.error('Error registering patient:', error);
         alert('Error registering patient: ' + error.message);
@@ -1531,6 +1527,9 @@ async function requestBlood() {
 // Function to display blood requests
 async function displayBloodRequests(targetElementId) {
     try {
+        // Ensure contract is initialized
+        await ensureInitialized();
+
         const result = await bloodBankContract.methods.getRegisteredUsers().call();
         const registeredPatients = result[1];
         const requestsList = document.getElementById(targetElementId);
@@ -1543,11 +1542,11 @@ async function displayBloodRequests(targetElementId) {
         // First, collect all pending requests
         for (const patientAddress of registeredPatients) {
             for (let bloodType = 0; bloodType < 4; bloodType++) {
-            const requests = await bloodBankContract.methods.getPatientRequests(patientAddress, bloodType).call();
+                const requests = await bloodBankContract.methods.getPatientRequests(patientAddress, bloodType).call();
 
                 if (requests.length > 0) {
-            for (const request of requests) {
-                if (!request.isResponded) {
+                    for (const request of requests) {
+                        if (!request.isResponded) {
                             const patient = await bloodBankContract.methods.patients(patientAddress).call();
                             pendingRequests.push({
                                 patientAddress,

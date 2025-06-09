@@ -22,54 +22,66 @@
 
     <div class="container" style="margin-top: 100px;">
         <div class="card fade-in">
-            <h1 style="text-align: center; color: var(--primary-color); margin-bottom: 2rem;">Welcome, Donor!</h1>
+            <h1 style="text-align: center; color: var(--primary-color); margin-bottom: 2rem;">Donor Dashboard</h1>
             
             <div class="dashboard-grid">
                 <div class="stat-card">
                     <h3>Total Donations</h3>
-                    <p class="number" id="totalDonated">0</p>
-                    <p>units of blood</p>
+                    <p class="number" id="totalDonated">Loading...</p>
                 </div>
                 
                 <div class="stat-card">
                     <h3>Last Donation</h3>
-                    <p id="lastDonation">No donations yet</p>
+                    <p class="number" id="lastDonation">Loading...</p>
                 </div>
                 
                 <div class="stat-card">
                     <h3>Blood Type</h3>
-                    <p id="bloodType">Not specified</p>
+                    <p class="number" id="bloodType">Loading...</p>
                 </div>
-            </div>
-
-            <div class="card" style="margin-top: 2rem;">
-                <h2 style="color: var(--secondary-color); margin-bottom: 1rem;">Donate Blood</h2>
-                <button onclick="donateBlood()" class="btn btn-primary">Donate Blood Now</button>
             </div>
 
             <div class="card" style="margin-top: 2rem;">
                 <h2 style="color: var(--secondary-color); margin-bottom: 1rem;">Donation History</h2>
-                <div id="donationDetailsList" style="max-height: 300px; overflow-y: auto;">
-                    <!-- Donation details will be displayed here -->
-                </div>
+                <ul id="donationDetailsList" style="list-style: none; padding: 0;">
+                    <li>Loading...</li>
+                </ul>
             </div>
 
             <div class="card" style="margin-top: 2rem;">
-                <h2 style="color: var(--secondary-color); margin-bottom: 1rem;">Blood Requests</h2>
-                <div id="bloodRequestsList" style="max-height: 300px; overflow-y: auto;">
-                    <!-- Blood requests will be displayed here -->
-                </div>
+                <h2 style="color: var(--secondary-color); margin-bottom: 1rem;">Actions</h2>
+                <button onclick="donateBlood()" class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;">Donate Blood</button>
+                <button onclick="displayBloodRequests('requestsList')" class="btn btn-secondary" style="width: 100%;">View Blood Requests</button>
             </div>
+
+            <div id="requestsList" style="margin-top: 2rem;"></div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
     <script src="app.js"></script>
     <script>
-        // Display stored donation details when page loads
-        window.addEventListener('load', () => {
-            displayStoredDonationDetails();
-            displayBloodRequests();
+        // Initialize the dashboard when the page loads
+        window.addEventListener('load', async () => {
+            try {
+                // Initialize Web3 if not already done
+                if (!web3 || !bloodBankContract) {
+                    await initWeb3();
+                }
+
+                // Display donation details
+                await displayStoredDonationDetails();
+
+                // Set up event listeners for MetaMask account changes
+                if (window.ethereum) {
+                    window.ethereum.on('accountsChanged', async function (accounts) {
+                        await displayStoredDonationDetails();
+                    });
+                }
+            } catch (error) {
+                console.error('Error initializing dashboard:', error);
+                alert('Error loading dashboard. Please check console for details.');
+            }
         });
     </script>
 </body>
