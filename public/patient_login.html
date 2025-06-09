@@ -3,19 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blood Bank Management System - Patient Login</title>
-    
+    <title>Patient Login - Blood Bank Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Patient Login</h1>
-    <form id="patientLoginForm">
-        <label for="patientAddress">Patient Address:</label>
-        <input type="text" id="patientAddress" required>
+    <nav class="navbar">
+        <div class="nav-content">
+            <a href="index.html" class="logo">BloodBank</a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="donor_login.html">Donor</a>
+                <a href="patient_login.html">Patient</a>
+                <a href="admin.html">Admin</a>
+            </div>
+        </div>
+    </nav>
 
-        <button type="button" onclick="patientLogin()">Login</button>
-    </form>
+    <div class="container" style="margin-top: 100px;">
+        <div class="card fade-in">
+            <h1 style="text-align: center; color: var(--primary-color); margin-bottom: 2rem;">Patient Login</h1>
+            
+            <div class="form-group">
+                <p style="text-align: center;">Please connect your MetaMask wallet to login</p>
+                <p id="connectedAddress" style="text-align: center; word-break: break-all; margin: 10px 0;"></p>
+            </div>
+            
+            <button onclick="connectWallet()" class="btn btn-primary" style="width: 100%;">Connect Wallet</button>
+
+            <p style="text-align: center; margin-top: 1rem;">
+                Don't have an account? <a href="register.html">Register here</a>
+            </p>
+        </div>
+
+        <div class="card" style="margin-top: 2rem;">
+            <h2 style="color: var(--secondary-color); margin-bottom: 1rem;">Need Blood?</h2>
+            <ul style="list-style: none;">
+                <li style="margin-bottom: 0.5rem;">✓ Quick and easy blood requests</li>
+                <li style="margin-bottom: 0.5rem;">✓ Real-time blood availability tracking</li>
+                <li style="margin-bottom: 0.5rem;">✓ Connect with nearby hospitals</li>
+                <li style="margin-bottom: 0.5rem;">✓ Emergency request support</li>
+            </ul>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
     <script src="app.js"></script>
+    <script>
+        async function connectWallet() {
+            try {
+                if (typeof window.ethereum !== 'undefined') {
+                    // Request account access
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    const address = accounts[0];
+                    
+                    // Display connected address
+                    document.getElementById('connectedAddress').textContent = `Connected: ${address}`;
+                    
+                    // Check if the address is registered as a patient
+                    const patient = await bloodBankContract.methods.patients(address).call();
+                    
+                    if (patient.isRegistered) {
+                        window.location.href = 'patient_dashboard.html';
+                    } else {
+                        alert('This address is not registered as a patient. Please register first.');
+                        window.location.href = 'register.html';
+                    }
+                } else {
+                    alert('Please install MetaMask to use this application.');
+                }
+            } catch (error) {
+                console.error('Error connecting wallet:', error);
+                alert('Error connecting wallet: ' + error.message);
+            }
+        }
+    </script>
 </body>
 </html>

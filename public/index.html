@@ -3,64 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blood Bank BlochChain System</title>
-    <!-- Include Web3 library -->
-    <script src="https://cdn.jsdelivr.net/npm/web3@1.3.6/dist/web3.min.js"></script>
-    <style>
-        body {
-            font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            background-image: url('imgs/image.png'); 
-            background-size: cover;
-            background-repeat: no-repeat;
-            background-position: center;
-            height: 100vh; /* Ensure the background covers the entire viewport height */
-            margin: 0; /* Remove default margin to prevent unwanted spacing */
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white; /* Set text color to white for better visibility */
-        }
-
-        h1 {
-            color: #333;
-        }
-
-        button {
-            background-color: #4caf50;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 16px;
-            margin: 10px;
-            cursor: pointer;
-            border-radius: 5px;
-            transition: background-color 0.3s;
-        }
-
-        button:hover {
-            background-color: #45a049;
-        }
-    </style>
+    <title>Blood Bank Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Blood Bank BlocKchain System</h1>
-    <button onclick="redirectTo('register.html')">Register Donor/Patient</button>
-    <button onclick="redirectTo('admin.html')">Admin Login</button>
-    <button onclick="redirectTo('login.html')">User Login</button>
-    <button onclick="redirectTo('donated_blood.html')">check available donated_blood</button>
-    
+    <nav class="navbar">
+        <div class="nav-content">
+            <a href="index.html" class="logo">BloodBank</a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="donor_login.html">Donor</a>
+                <a href="patient_login.html">Patient</a>
+                <a href="admin.html">Admin</a>
+            </div>
+        </div>
+    </nav>
 
+    <div class="container" style="margin-top: 100px;">
+        <div class="card fade-in">
+            <h1 style="text-align: center; color: var(--primary-color); margin-bottom: 2rem;">Welcome to Blood Bank Management System</h1>
+            
+            <div class="dashboard-grid">
+                <div class="stat-card">
+                    <h3>Donors</h3>
+                    <p class="number" id="donorCount"></p>
+                    <a href="donor_login.html" class="btn btn-primary" style="margin-top: 1rem;">Register as Donor</a>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>Patients</h3>
+                    <p class="number" id="patientCount"></p>
+                    <a href="patient_login.html" class="btn btn-primary" style="margin-top: 1rem;">Register as Patient</a>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>Available Blood Units</h3>
+                    <p class="number" id="bloodUnits"></p>
+                    <a href="donated_Blood.html" class="btn btn-primary" style="margin-top: 1rem;">View Blood Stock</a>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 2rem;">
+                <h2 style="color: var(--secondary-color); margin-bottom: 1rem;">About Our System</h2>
+                <p>Our blockchain-based Blood Bank Management System ensures transparency, security, and efficiency in blood donation and distribution. Using Ethereum smart contracts, we maintain a decentralized and immutable record of all blood donations and requests.</p>
+                
+                <div style="margin-top: 2rem;">
+                    <h3 style="color: var(--secondary-color); margin-bottom: 1rem;">Key Features:</h3>
+                    <ul style="list-style: none;">
+                        <li style="margin-bottom: 0.5rem;">✓ Secure donor and patient registration</li>
+                        <li style="margin-bottom: 0.5rem;">✓ Real-time blood stock tracking</li>
+                        <li style="margin-bottom: 0.5rem;">✓ Transparent donation history</li>
+                        <li style="margin-bottom: 0.5rem;">✓ Emergency blood request system</li>
+                        <li style="margin-bottom: 0.5rem;">✓ Hospital network integration</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
     <script src="app.js"></script>
+    <script>
+        let web3;
+        let bloodBankContract;
+
+        // Initialize Web3 and contract
+        async function initWeb3() {
+            try {
+                // Check if MetaMask is installed
+                if (typeof window.ethereum !== 'undefined') {
+                    // Request account access
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    web3 = new Web3(window.ethereum);
+                } else {
+                    console.error('Please install MetaMask!');
+                    return false;
+                }
+
+                // Get the contract instance
+                const contractAddress = '0xF06Cbf3cCB5D0b2f5a6C1AFDAb5559f0483783CD';
+                const contractABI = [
+                    {
+                        "inputs": [],
+                        "name": "totalDonors",
+                        "outputs": [{"type": "uint256"}],
+                        "stateMutability": "view",
+                        "type": "function"
+                    },
+                    {
+                        "inputs": [],
+                        "name": "totalPatients",
+                        "outputs": [{"type": "uint256"}],
+                        "stateMutability": "view",
+                        "type": "function"
+                    },
+                    {
+                        "inputs": [],
+                        "name": "getTotalBloodDonated",
+                        "outputs": [{"type": "uint256"}],
+                        "stateMutability": "view",
+                        "type": "function"
+                    }
+                ];
+
+                bloodBankContract = new web3.eth.Contract(contractABI, contractAddress);
+                return true;
+            } catch (error) {
+                console.error('Error initializing Web3:', error);
+                return false;
+            }
+        }
+
+        // Update statistics
+        async function updateStats() {
+            try {
+                // Initialize Web3 if not already initialized
+                if (!web3 || !bloodBankContract) {
+                    const initialized = await initWeb3();
+                    if (!initialized) {
+                        throw new Error('Failed to initialize Web3');
+                    }
+                }
+
+                // Get accounts
+                const accounts = await web3.eth.getAccounts();
+                if (accounts.length === 0) {
+                    throw new Error('No accounts found');
+                }
+
+                // Fetch statistics directly from contract state variables
+                const donorCount = await bloodBankContract.methods.totalDonors().call();
+                const patientCount = await bloodBankContract.methods.totalPatients().call();
+                const bloodUnits = await bloodBankContract.methods.getTotalBloodDonated().call();
+                
+                // Update the display
+                document.getElementById('donorCount').textContent = donorCount;
+                document.getElementById('patientCount').textContent = patientCount;
+                document.getElementById('bloodUnits').textContent = bloodUnits;
+            } catch (error) {
+                console.error('Error updating stats:', error);
+                // Show error state with retry button
+                document.getElementById('donorCount').innerHTML = 'Error <button onclick="updateStats()" class="btn btn-secondary" style="padding: 2px 8px; font-size: 12px;">Retry</button>';
+                document.getElementById('patientCount').innerHTML = 'Error <button onclick="updateStats()" class="btn btn-secondary" style="padding: 2px 8px; font-size: 12px;">Retry</button>';
+                document.getElementById('bloodUnits').innerHTML = 'Error <button onclick="updateStats()" class="btn btn-secondary" style="padding: 2px 8px; font-size: 12px;">Retry</button>';
+            }
+        }
+
+        // Initialize and update stats when page loads
+        window.addEventListener('load', async () => {
+            await initWeb3();
+            updateStats();
+        });
+
+        // Update stats every 30 seconds
+        setInterval(updateStats, 30000);
+    </script>
 </body>
 </html>

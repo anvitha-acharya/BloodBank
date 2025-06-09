@@ -212,5 +212,49 @@ function getPatientRequests(address patientAddress, BloodType bloodType) public 
         function getRegisteredUsers() public view returns (address[] memory registeredDonors, address[] memory registeredPatients) {
         return (donorAddresses, patientAddresses);
     }
+
+    // Function to remove a donor
+    function removeDonor(address donorAddress) public isAdmin {
+        require(donors[donorAddress].isRegistered, "Donor not registered");
+        
+        // Remove from donors mapping
+        delete donors[donorAddress];
+        
+        // Remove from allowed donors
+        allowedDonors[donorAddress] = false;
+        
+        // Remove from donorAddresses array
+        for (uint i = 0; i < donorAddresses.length; i++) {
+            if (donorAddresses[i] == donorAddress) {
+                donorAddresses[i] = donorAddresses[donorAddresses.length - 1];
+                donorAddresses.pop();
+                break;
+            }
+        }
+        
+        totalDonors--;
+    }
+
+    // Function to remove a patient
+    function removePatient(address patientAddress) public isAdmin {
+        require(patients[patientAddress].isRegistered, "Patient not registered");
+        
+        // Remove from patients mapping
+        delete patients[patientAddress];
+        
+        // Remove from allowed patients
+        allowedPatients[patientAddress] = false;
+        
+        // Remove from patientAddresses array
+        for (uint i = 0; i < patientAddresses.length; i++) {
+            if (patientAddresses[i] == patientAddress) {
+                patientAddresses[i] = patientAddresses[patientAddresses.length - 1];
+                patientAddresses.pop();
+                break;
+            }
+        }
+        
+        totalPatients--;
+    }
 }
 

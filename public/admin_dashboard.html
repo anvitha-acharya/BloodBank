@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Blood Bank Management System - Admin Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -95,50 +97,171 @@
         h3 {
             color: rgb(120, 154, 250); /* Text color for the column headings */
         }
+        .user-card {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .user-info {
+            flex: 1;
+        }
+        .user-actions {
+            margin-left: 15px;
+        }
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            margin-left: 10px;
+        }
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-approved {
+            background: #d4edda;
+            color: #155724;
+        }
     </style>
 </head>
 <body>
-    <h1>Admin Dashboard</h1>
-    <p>Welcome, Admin!</p>
-
-    <div id="adminMessages">
-        <h2>Admin Messages</h2>
-        <ul id="adminMessageList"></ul>
-    </div>
-
-    <div id="registeredUsers">
-        <h2>Registered Users</h2>
-            <div id="donorsList">
-            <h3>Registered Donors</h3>
-            <img src="imgs/registered.jpg" alt="Donor Image">
-            <ul id="donorsDetailsList"></ul>
+    <nav class="navbar">
+        <div class="nav-content">
+            <a href="index.html" class="logo">BloodBank</a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="donor_login.html">Donor</a>
+                <a href="patient_login.html">Patient</a>
+                <a href="admin.html">Admin</a>
+            </div>
         </div>
-        <div id="patientsList">
-            <h3>Registered Patients</h3>
+    </nav>
+
+    <div class="container" style="margin-top: 100px;">
+        <div class="card fade-in">
+            <h1 style="text-align: center; color: var(--primary-color); margin-bottom: 2rem;">Admin Dashboard</h1>
             
-            <ul id="patientsDetailsList"></ul>
+            <div class="dashboard-grid">
+                <div class="card">
+                    <h2>Registered Donors</h2>
+                    <div id="donorsList">
+                        <ul id="donorsDetailsList"></ul>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2>Registered Patients</h2>
+                    <div id="patientsList">
+                        <ul id="patientsDetailsList"></ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 2rem;">
+                <h2>Blood Requests</h2>
+                <div id="BloodRequestsListForAdmin">
+                    <ul id="bloodRequestsListAdmin"></ul>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 2rem;">
+                <h2>Admin Actions</h2>
+                <div class="dashboard-grid">
+                    <button onclick="grantUserPermission()" class="btn btn-primary">Grant User Permission</button>
+                    <button onclick="respondToRequest()" class="btn btn-secondary">Respond to Requests</button>
+                </div>
+            </div>
         </div>
     </div>
-
-    <div id="BloodRequestsListForAdmin">
-        <h3>Blood Requests Made By Patients</h3>
-        <ul id="bloodRequestsListAdmin"></ul>
-    </div>
-    
-    <div>
-        <h2>Admin Actions</h2>
-        <button onclick="respondToRequest()">Respond to Requests</button>
-        <button onclick="grantUserPermission()">Grant User Permission</button>
-    </div>
-
-    <script>
-        // Call the function when the window loads for patient_dashboard
-        window.onload = () => {
-            displayBloodRequests('bloodRequestsListAdmin');
-        };
-    </script>
 
     <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
     <script src="app.js"></script>
+    <script>
+        // Initialize the dashboard when the page loads
+        window.addEventListener('load', async () => {
+            try {
+                // Initialize Web3 if not already done
+                if (!web3 || !bloodBankContract) {
+                    await initWeb3();
+                }
+                
+                // Display registered users
+                await displayRegisteredUsers();
+                
+                // Display blood requests
+                await displayBloodRequests('bloodRequestsListAdmin');
+            } catch (error) {
+                console.error('Error initializing dashboard:', error);
+                alert('Error loading dashboard. Please check console for details.');
+            }
+        });
+
+        // Function to display registered users
+        async function displayRegisteredUsers() {
+            try {
+                const { registeredDonors, registeredPatients } = await bloodBankContract.methods.getRegisteredUsers().call();
+
+                // Display donors
+                const donorsList = document.getElementById('donorsDetailsList');
+                donorsList.innerHTML = '';
+                for (const donorAddress of registeredDonors) {
+                    const donorDetails = await bloodBankContract.methods.donors(donorAddress).call();
+                    const isAllowed = await bloodBankContract.methods.isDonorAllowed(donorAddress).call();
+                    
+                    const listItem = document.createElement('li');
+                    listItem.className = 'user-card';
+                    listItem.innerHTML = `
+                        <div class="user-info">
+                            <strong>${donorDetails.name}</strong>
+                            <br>
+                            <small>Address: ${donorAddress}</small>
+                            <br>
+                            <small>Blood Type: ${donorDetails.bloodType}</small>
+                        </div>
+                        <div class="user-actions">
+                            <span class="status-badge ${isAllowed ? 'status-approved' : 'status-pending'}">
+                                ${isAllowed ? 'Approved' : 'Pending'}
+                            </span>
+                        </div>
+                    `;
+                    donorsList.appendChild(listItem);
+                }
+
+                // Display patients
+                const patientsList = document.getElementById('patientsDetailsList');
+                patientsList.innerHTML = '';
+                for (const patientAddress of registeredPatients) {
+                    const patientDetails = await bloodBankContract.methods.patients(patientAddress).call();
+                    const isAllowed = await bloodBankContract.methods.isPatientAllowed(patientAddress).call();
+                    
+                    const listItem = document.createElement('li');
+                    listItem.className = 'user-card';
+                    listItem.innerHTML = `
+                        <div class="user-info">
+                            <strong>${patientDetails.name}</strong>
+                            <br>
+                            <small>Address: ${patientAddress}</small>
+                            <br>
+                            <small>Blood Type: ${patientDetails.bloodType}</small>
+                        </div>
+                        <div class="user-actions">
+                            <span class="status-badge ${isAllowed ? 'status-approved' : 'status-pending'}">
+                                ${isAllowed ? 'Approved' : 'Pending'}
+                            </span>
+                        </div>
+                    `;
+                    patientsList.appendChild(listItem);
+                }
+            } catch (error) {
+                console.error('Error displaying registered users:', error);
+                alert('Error loading user list. Please check console for details.');
+            }
+        }
+    </script>
 </body>
 </html>

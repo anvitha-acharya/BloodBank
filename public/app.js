@@ -1,19 +1,59 @@
 let web3;
+let bloodBankContract;
+let isInitialized = false;
 
-// Check if Web3 is injected by Metamask
-if (typeof window.ethereum !== 'undefined') {
-    web3 = new Web3(window.ethereum);
-    // Request account access if needed
-    window.ethereum.enable().catch(error => {
-        console.error('Error enabling Metamask accounts:', error.message);
-    });
-} else {
-    // Handle the case where the user doesn't have Metamask installed or not connected to the Ethereum network
-    alert("Please install Metamask to use this application.");
+// Initialize Web3 and contract
+async function initWeb3() {
+    try {
+        // Check if MetaMask is installed
+        if (typeof window.ethereum !== 'undefined') {
+            // Request account access
+            await window.ethereum.request({ method: 'eth_requestAccounts' });
+            web3 = new Web3(window.ethereum);
+            
+            // Initialize contract
+            const contractAddress = '0x3a9227BeFBe723f78Ea463AF0D993B34B603494F';
+            bloodBankContract = new web3.eth.Contract(contractABI, contractAddress);
+            
+            // Verify contract is initialized
+            try {
+                await bloodBankContract.methods.getBloodInventory(0).call();
+                console.log('Contract initialized successfully');
+                isInitialized = true;
+                return true;
+            } catch (error) {
+                console.error('Contract initialization failed:', error);
+                alert('Contract not found at the specified address. Please make sure the contract is deployed correctly.');
+                return false;
+            }
+        } else {
+            alert("Please install MetaMask to use this application.");
+            return false;
+        }
+    } catch (error) {
+        console.error('Error initializing Web3:', error);
+        alert('Error connecting to MetaMask. Please make sure MetaMask is installed and connected to the correct network.');
+        return false;
+    }
+}
+
+// Initialize on page load
+window.addEventListener('load', async () => {
+    await initWeb3();
+});
+
+// Helper function to ensure contract is initialized
+async function ensureInitialized() {
+    if (!isInitialized) {
+        const success = await initWeb3();
+        if (!success) {
+            throw new Error('Failed to initialize Web3 and contract');
+        }
+    }
 }
 
 // Contract Address and ABI (replace with your actual deployed contract address and ABI)
-const contractAddress = '0x399bbF80299a58e697a3028927f5Ee4c0d6fFb83';
+const contractAddress = '0x3a9227BeFBe723f78Ea463AF0D993B34B603494F';
 const contractABI = [
 	{
 		"inputs": [],
@@ -1055,7 +1095,6 @@ const contractABI = [
 		"type": "function"
 	}
 ] ;
-const bloodBankContract = new web3.eth.Contract(contractABI, contractAddress);
 
 function redirectTo(page) {
     window.location.href = page;
@@ -1088,161 +1127,213 @@ async function isValidAdminAddress(adminAddress) {
     return adminAddress.trim() !== '';
 }
 
+// Function to register a donor
 async function registerDonor() {
-    await registerUser('Donor');
-}
-
-async function registerPatient() {
-    await registerUser('Patient');
-}
-
-// Function to register a user (donor or patient)
-async function registerUser() {
     try {
-        const userName = document.getElementById('userName').value;
-        const userType = document.getElementById('userType').value;
+        await ensureInitialized();
+        
+        const name = document.getElementById('donorName').value;
+        const age = document.getElementById('donorAge').value;
+        const bloodType = document.getElementById('donorBloodType').value;
 
-        // Get the selected blood type from the dropdown (select) element
-        const bloodTypeSelect = document.getElementById('bloodType');
-        const selectedBloodType = bloodTypeSelect.options[bloodTypeSelect.selectedIndex].value;
-
-        // Define a mapping of blood type names to numeric values
-        const bloodTypeMapping = {
-            'A': 0,
-            'B': 1,
-            'AB': 2,
-            'O': 3
-        };
-
-        // Convert the selectedBloodType to the corresponding numeric value
-        const bloodTypeNumericValue = bloodTypeMapping[selectedBloodType.toUpperCase()];
-
-        // Define the registration method based on the user type
-        let registrationMethod;
-        if (userType === 'Donor') {
-            registrationMethod = bloodBankContract.methods.registerAsDonor;
-        } else if (userType === 'Patient') {
-            registrationMethod = bloodBankContract.methods.registerAsPatient;
-        } else {
-            // Handle other user types or show an error
-            alert('Invalid user type selected.');
+        if (!name || !age || !bloodType) {
+            alert('Please fill in all fields');
             return;
         }
 
-        // Get the default account
-        const defaultAccount = await web3.eth.getAccounts().then(accounts => accounts[0]);
-
-        // Call the appropriate registration method in your smart contract
-        const transaction = await registrationMethod(userName, bloodTypeNumericValue).send({ from: defaultAccount });
-
-        console.log('Transaction Hash:', transaction.transactionHash);
-        console.log('Gas Used:', transaction.gasUsed);
-        // Check if the transaction was successful
-        if (transaction.status) {
-            alert(`${userType} registered successfully!`);
-            // Redirect to the appropriate login page based on the user type
-            if (userType === 'Donor') {
-                redirectTo('donor_login.html');
-            } else if (userType === 'Patient') {
-                redirectTo('patient_login.html');
-            } else {
-                // Handle other user types or redirect accordingly
-            }
-        } else {
-            alert('Transaction failed. Please check the transaction status.');
+        if (age < 18 || age > 65) {
+            alert('Age must be between 18 and 65 years');
+            return;
         }
+
+        const accounts = await web3.eth.getAccounts();
+        const donorAddress = accounts[0];
+
+        // Map blood type string to numeric value
+        const bloodTypeMap = { 'A': 0, 'B': 1, 'AB': 2, 'O': 3 };
+        const bloodTypeNumeric = bloodTypeMap[bloodType];
+
+        // Register the donor
+        await bloodBankContract.methods.registerAsDonor(name, bloodTypeNumeric)
+            .send({ from: donorAddress });
+
+        alert('Donor registration successful! Please wait for admin approval.');
+        window.location.href = 'donor_login.html';
     } catch (error) {
-        console.error('Error registering user:', error.message);
+        console.error('Error registering donor:', error);
+        alert('Error registering donor: ' + error.message);
+    }
+}
 
-        // Additional error handling and logging
-        if (error.message.includes('insufficient funds')) {
-            alert('Insufficient funds. Please make sure your account has enough ETH.');
-        } else if (error.message.includes('gas too low')) {
-            alert('Gas limit too low. Please increase the gas limit.');
-        } else {
-            alert('An unexpected error occurred. Please check the console for more details.');
+// Function to register a patient
+async function registerPatient() {
+    try {
+        await ensureInitialized();
+        
+        const name = document.getElementById('patientName').value;
+        const age = document.getElementById('patientAge').value;
+        const bloodType = document.getElementById('patientBloodType').value;
+
+        if (!name || !age || !bloodType) {
+            alert('Please fill in all fields');
+            return;
         }
+
+        // Use the correct Ganache address
+        const patientAddress = '0x21f49D3476000345c34E214741cADee8317ead94';
+
+        // Map blood type string to numeric value
+        const bloodTypeMap = { 'A': 0, 'B': 1, 'AB': 2, 'O': 3 };
+        const bloodTypeNumeric = bloodTypeMap[bloodType];
+
+        // Register the patient
+        await bloodBankContract.methods.registerAsPatient(name, bloodTypeNumeric)
+            .send({ from: patientAddress });
+
+        // Store the patient address
+        localStorage.setItem('patientAddress', patientAddress);
+        localStorage.setItem('userAddress', patientAddress);
+        localStorage.setItem('userType', 'patient');
+
+        alert('Patient registration successful! Please wait for admin approval.');
+        window.location.href = 'patient_dashboard.html';
+    } catch (error) {
+        console.error('Error registering patient:', error);
+        alert('Error registering patient: ' + error.message);
     }
 }
 
 // Function to handle granting user permission by admin
 async function grantUserPermission() {
     try {
-		
+        // Get admin address
+        const adminAddress = await getCurrentUserAddress();
+        if (!adminAddress) {
+            alert('Please connect your MetaMask wallet first');
+            return;
+        }
+
+        // Get registered users
         const { registeredDonors, registeredPatients } = await bloodBankContract.methods.getRegisteredUsers().call();
 
-        // Display the details of registered donors on the admin_dashboard.html
-        const donorsDetailsList = document.getElementById('donorsDetailsList');
-        donorsDetailsList.innerHTML = '';
+        // Create a list of pending users
+        const pendingUsers = [];
+        
+        // Check donors
         for (const donorAddress of registeredDonors) {
+            const isAllowed = await bloodBankContract.methods.isDonorAllowed(donorAddress).call();
+            if (!isAllowed) {
             const donorDetails = await bloodBankContract.methods.donors(donorAddress).call();
-            const listItem = document.createElement('li');
-            listItem.textContent = `Donor at ${donorAddress}: Name - ${donorDetails.name}, Blood Type - ${donorDetails.bloodType}`;
-            donorsDetailsList.appendChild(listItem);
+                pendingUsers.push({
+                    address: donorAddress,
+                    name: donorDetails.name,
+                    type: 'Donor',
+                    bloodType: ['A', 'B', 'AB', 'O'][donorDetails.bloodType]
+                });
+            }
         }
 
-        // Display the details of registered patients on the admin_dashboard.html
-        const patientsDetailsList = document.getElementById('patientsDetailsList');
-        patientsDetailsList.innerHTML = '';
+        // Check patients
         for (const patientAddress of registeredPatients) {
+            const isAllowed = await bloodBankContract.methods.isPatientAllowed(patientAddress).call();
+            if (!isAllowed) {
             const patientDetails = await bloodBankContract.methods.patients(patientAddress).call();
-            const listItem = document.createElement('li');
-            listItem.textContent = `Patient at ${patientAddress}: Name - ${patientDetails.name}, Blood Type - ${patientDetails.bloodType}`;
-            patientsDetailsList.appendChild(listItem);
+                pendingUsers.push({
+                    address: patientAddress,
+                    name: patientDetails.name,
+                    type: 'Patient',
+                    bloodType: ['A', 'B', 'AB', 'O'][patientDetails.bloodType]
+                });
+            }
         }
 
-        // Additional logic for granting user permission...
-        const userAddress = prompt('Enter user address:'); // Prompt for simplicity, replace with your UI logic
-        const isDonor = registeredDonors.includes(userAddress);
-        const isPatient = registeredPatients.includes(userAddress);
+        if (pendingUsers.length === 0) {
+            alert('No pending users to approve');
+            return;
+        }
 
-        if (isDonor) {
-            await bloodBankContract.methods.grantDonorPermission(userAddress).send({ from: userAddress });
-            alert('Donor Permission Granted');
-        } else if (isPatient) {
-            await bloodBankContract.methods.grantPatientPermission(userAddress).send({ from: userAddress });
-            alert('Patient Permission Granted');
+        // Create a formatted list of pending users
+        const userList = pendingUsers.map((user, index) => 
+            `${index + 1}. ${user.type}: ${user.name}\n   Address: ${user.address}\n   Blood Type: ${user.bloodType}`
+        ).join('\n\n');
+
+        // Show the list and get user input
+        const userInput = prompt(
+            'Select a user to approve (enter number):\n\n' + userList
+        );
+
+        if (!userInput) {
+            return; // User cancelled
+        }
+
+        const selectedIndex = parseInt(userInput) - 1;
+        if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= pendingUsers.length) {
+            alert('Invalid selection. Please enter a number between 1 and ' + pendingUsers.length);
+            return;
+        }
+
+        const selectedUser = pendingUsers[selectedIndex];
+
+        // Grant permission based on user type
+        if (selectedUser.type === 'Donor') {
+            await bloodBankContract.methods.grantDonorPermission(selectedUser.address)
+                .send({ from: adminAddress });
+            alert(`Donor ${selectedUser.name} has been approved`);
         } else {
-            alert('User not found in the registered donors or patients list');
+            await bloodBankContract.methods.grantPatientPermission(selectedUser.address)
+                .send({ from: adminAddress });
+            alert(`Patient ${selectedUser.name} has been approved`);
         }
+
+        // Refresh the display
+        if (typeof displayRegisteredUsers === 'function') {
+            await displayRegisteredUsers();
+        }
+
     } catch (error) {
-        console.error('Error during granting user permission:', error.message);
+        console.error('Error during granting user permission:', error);
+        alert('Error granting permission: ' + error.message);
     }
 }
 
 // Function to handle donor login
 async function donorLogin() {
     try {
+        await ensureInitialized();
         const donorAddress = document.getElementById('donorAddress').value;
-        const isDonorAllowed = await bloodBankContract.methods.isDonorAllowed(donorAddress).call();
+        const donor = await bloodBankContract.methods.donors(donorAddress).call();
         
-        if (isDonorAllowed) {
-            alert('Donor Login Successful');
-            // Redirect to the donor dashboard or other donor-specific pages
+        if (donor.isRegistered) {
+            localStorage.setItem('userAddress', donorAddress);
+            localStorage.setItem('userType', 'donor');
             redirectTo('donor_dashboard.html');
         } else {
-            alert('Donor Login Permission Denied. Please contact the admin.');
+            alert('Donor not registered. Please register first.');
         }
     } catch (error) {
-        console.error('Error during donor login:', error.message);
+        console.error('Error during login:', error);
+        alert('Error during login. Please try again.');
     }
 }
 
 // Function to handle patient login
 async function patientLogin() {
     try {
-        const patientAddress = document.getElementById('patientAddress').value;
-        const isPatientAllowed = await bloodBankContract.methods.isPatientAllowed(patientAddress).call();
+        await ensureInitialized();
+        const patientAddress = '0x21f49D3476000345c34E214741cADee8317ead94'; // Use the correct Ganache address
+        const patient = await bloodBankContract.methods.patients(patientAddress).call();
         
-        if (isPatientAllowed) {
-            alert('Patient Login Successful');
-            // Redirect to the patient dashboard or other patient-specific pages
+        if (patient.isRegistered) {
+            localStorage.setItem('userAddress', patientAddress);
+            localStorage.setItem('userType', 'patient');
+            localStorage.setItem('patientAddress', patientAddress); // Store patient address
             redirectTo('patient_dashboard.html');
         } else {
-            alert('Patient Login Permission Denied. Please contact the admin.');
+            alert('Patient not registered. Please register first.');
         }
     } catch (error) {
-        console.error('Error during patient login:', error.message);
+        console.error('Error during login:', error);
+        alert('Error during login. Please try again.');
     }
 }
 
@@ -1277,125 +1368,254 @@ function getCurrentUserAddress() {
 async function donateBlood() {
     try {
         const donorAddress = getCurrentUserAddress();
-        const bloodType = prompt('Enter the blood type (A, B, AB, O):'); // Prompt for blood type
-        const donationAmount = prompt('Enter the amount of blood to donate:'); // Prompt for amount
+        if (!donorAddress) {
+            alert('Please connect your MetaMask wallet first');
+            return;
+        }
 
-        // Convert the donationAmount to a number
+        const bloodTypeStr = prompt('Enter the blood type (A, B, AB, O):');
+        if (!bloodTypeStr) {
+            alert('Blood type is required');
+            return;
+        }
+
+        const bloodType = mapBloodType(bloodTypeStr.toUpperCase());
+        if (bloodType === undefined) {
+            alert('Invalid blood type. Please enter A, B, AB, or O');
+            return;
+        }
+
+        const donationAmount = prompt('Enter the amount of blood to donate:');
+        if (!donationAmount) {
+            alert('Amount is required');
+            return;
+        }
+
         const amount = parseInt(donationAmount);
+        if (isNaN(amount) || amount <= 0) {
+            alert('Please enter a valid amount');
+            return;
+        }
 
         // Call the smart contract function for blood donation
         await bloodBankContract.methods.donateBlood(bloodType, amount).send({ from: donorAddress });
 
-		displayDonationDetails(donorAddress, bloodType, amount);
+        // Store the donation details
+        const donationKey = `donation_${new Date().getTime()}`;
+        const donationData = { donorAddress, bloodType: bloodTypeStr, amount };
+        localStorage.setItem(donationKey, JSON.stringify(donationData));
+        
+        // Clear and refresh the display
+        const donationDetailsList = document.getElementById('donationDetailsList');
+        if (donationDetailsList) {
+            donationDetailsList.innerHTML = '';
+        }
+        displayStoredDonationDetails();
+        
         alert('Blood Donation Successful');
     } catch (error) {
         console.error('Error during blood donation:', error.message);
+        alert('Error during blood donation: ' + error.message);
     }
 }
-	// Function to dynamically display donation details
-	function displayDonationDetails(donorAddress, bloodType, amount) {
-		const donationDetailsList = document.getElementById('donationDetailsList');
-		const listItem = document.createElement('li');
-		listItem.textContent = `Donation from donor at ${donorAddress}. Blood Type: ${bloodType}, Amount: ${amount}`;
-		donationDetailsList.appendChild(listItem);
 
-		// Store donation details in local storage
-		const donationKey = `donation_${new Date().getTime()}`;
-		const donationData = { donorAddress, bloodType, amount };
-		localStorage.setItem(donationKey, JSON.stringify(donationData));
-	}
-
-	function displayStoredDonationDetails() {
-		const donationDetailsList = document.getElementById('donationDetailsList');
-		const totalDonatedElement = document.getElementById('totalDonated'); // Add this line
-	
-		// Check if the element exists before attempting to append
-		if (donationDetailsList) {
-			let totalAmount = 0; // Initialize total amount
-	
-			// Iterate through local storage and display stored donation details
-			for (let i = 0; i < localStorage.length; i++) {
-				const key = localStorage.key(i);
-				if (key.startsWith('donation_')) {
-					const donationData = JSON.parse(localStorage.getItem(key));
-	
-					// Create list item and append it to the list
-					const listItem = document.createElement('li');
-					listItem.textContent = `Donation from donor at ${donationData.donorAddress}. Blood Type: ${donationData.bloodType}, Amount: ${donationData.amount}`;
-					donationDetailsList.appendChild(listItem);
-	
-					// Update total amount
-					totalAmount += donationData.amount;
-				}
-			}
-	
-			// Display the total amount
-			if (totalDonatedElement) {
-				totalDonatedElement.textContent = `Total Donated: ${totalAmount} units`; // Update the content
-			}
-		} else {
-			console.error('Element with ID "donationDetailsList" not found.');
-		}
-	}
-	
-	
-
-	// Function to request blood
-	async function requestBlood() {
-		try {
-			const patientAddress = getCurrentUserAddress();
-			
-			// Check if the patient address is available
-			if (!patientAddress) {
-				console.error('Patient address not available');
-				return;
-			}
-
-			// Prompt the user for the blood type and amount
-			const bloodType = prompt('Enter blood type (A, B, AB, O):');
-			const amount = parseInt(prompt('Enter the amount of blood requested:'));
-
-			// Call the smart contract function for blood request with specified blood type and amount
-			await bloodBankContract.methods.requestBlood(bloodType, amount).send({ from: patientAddress });
-
-			alert('Blood Request Sent');
-		} catch (error) {
-			console.error('Error during blood request:', error.message);
-		}
-	}
-
-// Function to display blood donation requests
-async function displayBloodRequests(targetElementId) {
+// Function to display stored donation details
+async function displayStoredDonationDetails() {
     try {
-        const bloodRequestsList = document.getElementById(targetElementId);
+        const donationDetailsList = document.getElementById('donationDetailsList');
+        const totalDonatedElement = document.getElementById('totalDonated');
+        const lastDonationElement = document.getElementById('lastDonation');
+        const bloodTypeElement = document.getElementById('bloodType');
+        
+        if (donationDetailsList) {
+            let totalAmount = 0;
+            let lastDonation = null;
+            let bloodType = null;
+            donationDetailsList.innerHTML = ''; // Clear existing entries
+            
+            // Get all donation entries and sort them by timestamp
+            const donations = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('donation_')) {
+                    const donationData = JSON.parse(localStorage.getItem(key));
+                    donations.push({
+                        ...donationData,
+                        timestamp: parseInt(key.split('_')[1])
+                    });
+                }
+            }
 
-        if (!bloodRequestsList) {
-            console.error(`Element with id '${targetElementId}' not found.`);
+            // Sort donations by timestamp (newest first)
+            donations.sort((a, b) => b.timestamp - a.timestamp);
+
+            // Display donations and update statistics
+            donations.forEach(donation => {
+                // Create list item and append it to the list
+                const listItem = document.createElement('li');
+                listItem.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Donation from donor at ${donation.donorAddress}. Blood Type: ${donation.bloodType}, Amount: ${donation.amount}</span>
+                        <button onclick="removeDonation('${donation.donorAddress}', '${donation.bloodType}', ${donation.amount})" 
+                                class="btn btn-danger" style="margin-left: 10px; padding: 2px 8px;">Remove</button>
+                    </div>
+                `;
+                donationDetailsList.appendChild(listItem);
+                
+                // Update total amount
+                totalAmount += parseInt(donation.amount);
+
+                // Update last donation if not set
+                if (!lastDonation) {
+                    lastDonation = donation;
+                }
+
+                // Update blood type if not set
+                if (!bloodType) {
+                    bloodType = donation.bloodType;
+                }
+            });
+            
+            // Display the total amount
+            if (totalDonatedElement) {
+                totalDonatedElement.textContent = totalAmount;
+            }
+
+            // Display last donation
+            if (lastDonationElement) {
+                if (lastDonation) {
+                    const date = new Date(lastDonation.timestamp);
+                    lastDonationElement.textContent = `${lastDonation.bloodType} - ${lastDonation.amount} units (${date.toLocaleDateString()})`;
+                } else {
+                    lastDonationElement.textContent = 'No donations yet';
+                }
+            }
+
+            // Display blood type
+            if (bloodTypeElement) {
+                bloodTypeElement.textContent = bloodType || 'Not specified';
+            }
+        } else {
+            console.error('Element with ID "donationDetailsList" not found.');
+        }
+    } catch (error) {
+        console.error('Error displaying donation details:', error);
+        alert('Error loading donation details. Please check console for details.');
+    }
+}
+
+// Function to request blood
+async function requestBlood() {
+    try {
+        const patientAddress = getCurrentUserAddress();
+        
+        // Check if the patient address is available
+        if (!patientAddress) {
+            console.error('Patient address not available');
             return;
         }
 
-        bloodRequestsList.innerHTML = '';
+        // Prompt the user for the blood type and amount
+        const bloodType = prompt('Enter blood type (A, B, AB, O):');
+        const amount = parseInt(prompt('Enter the amount of blood requested:'));
 
-        const { registeredPatients } = await bloodBankContract.methods.getRegisteredUsers().call();
+        // Call the smart contract function for blood request with specified blood type and amount
+        await bloodBankContract.methods.requestBlood(bloodType, amount).send({ from: patientAddress });
 
-        for (const patientAddress of registeredPatients) {
-            // Assuming BloodType.A is represented by the numeric value 0
-            const bloodType = 0;
-            const requests = await bloodBankContract.methods.getPatientRequests(patientAddress, bloodType).call();
-
-            for (const request of requests) {
-                if (!request.isResponded) {
-                    const listItem = document.createElement('li');
-                    listItem.textContent = `Blood request from patient at ${patientAddress}. Blood Type: ${request.bloodType}`;
-                    bloodRequestsList.appendChild(listItem);
-                }
-            }
-        }
+        alert('Blood Request Sent');
     } catch (error) {
-        console.error('Error during displaying blood donation requests:', error.message);
+        console.error('Error during blood request:', error.message);
     }
 }
 
+// Function to display blood requests
+async function displayBloodRequests(targetElementId) {
+    try {
+        const result = await bloodBankContract.methods.getRegisteredUsers().call();
+        const registeredPatients = result[1];
+        const requestsList = document.getElementById(targetElementId);
+        requestsList.innerHTML = '';
+
+        const bloodTypes = ['A', 'B', 'AB', 'O'];
+        let hasRequests = false;
+        let pendingRequests = [];
+
+        // First, collect all pending requests
+        for (const patientAddress of registeredPatients) {
+            for (let bloodType = 0; bloodType < 4; bloodType++) {
+            const requests = await bloodBankContract.methods.getPatientRequests(patientAddress, bloodType).call();
+
+                if (requests.length > 0) {
+            for (const request of requests) {
+                if (!request.isResponded) {
+                            const patient = await bloodBankContract.methods.patients(patientAddress).call();
+                            pendingRequests.push({
+                                patientAddress,
+                                patientName: patient.name,
+                                bloodType,
+                                amount: request.amount
+                            });
+                            hasRequests = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!hasRequests) {
+            requestsList.innerHTML = '<p>No pending blood requests found.</p>';
+            return;
+        }
+
+        // Create a formatted list of pending requests
+        const requestList = pendingRequests.map((req, index) => 
+            `${index + 1}. Patient: ${req.patientName}\n   Address: ${req.patientAddress}\n   Blood Type: ${bloodTypes[req.bloodType]}\n   Amount: ${req.amount} units`
+        ).join('\n\n');
+
+        // Show the list and get user input
+        const userInput = prompt(
+            'Select a request to respond to (enter number):\n\n' + requestList
+        );
+
+        if (!userInput) {
+            return; // User cancelled
+        }
+
+        const selectedIndex = parseInt(userInput) - 1;
+        if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= pendingRequests.length) {
+            alert('Invalid selection. Please enter a number between 1 and ' + pendingRequests.length);
+            return;
+        }
+
+        const selectedRequest = pendingRequests[selectedIndex];
+        const response = confirm(`Do you want to approve this request?\n\nPatient: ${selectedRequest.patientName}\nBlood Type: ${bloodTypes[selectedRequest.bloodType]}\nAmount: ${selectedRequest.amount} units`);
+
+        if (response !== null) {
+            await respondToRequest(selectedRequest.patientAddress, selectedRequest.bloodType, response);
+            // Refresh the display
+            await displayBloodRequests(targetElementId);
+        }
+    } catch (error) {
+        console.error('Error displaying blood requests:', error);
+        alert('Error loading blood requests. Please check console for details.');
+    }
+}
+
+// Function to respond to a blood request
+async function respondToRequest(patientAddress, bloodType, response) {
+    try {
+        const accounts = await web3.eth.getAccounts();
+        const adminAddress = accounts[0];
+
+        await bloodBankContract.methods.respondToRequest(patientAddress, bloodType, response)
+            .send({ from: adminAddress });
+
+        alert(`Request ${response ? 'approved' : 'declined'} successfully!`);
+    } catch (error) {
+        console.error('Error responding to request:', error);
+        alert('Error responding to request: ' + error.message);
+    }
+}
 
 	function mapBloodType(bloodTypeString) {
 		const bloodTypeMap = {
@@ -1474,35 +1694,191 @@ async function displayBloodRequests(targetElementId) {
 			const selectedPatient = prompt('Select a patient with responses:\n' +
 				patientsWithResponsesFiltered.map((patient, index) => `${index + 1}. ${patient.patientAddress}`).join('\n'));
 	
-			// Check if the user selected a valid option
-			if (!selectedPatient || isNaN(selectedPatient) || selectedPatient < 1 || selectedPatient > patientsWithResponsesFiltered.length) {
-				console.log('Invalid selection. Please select a valid option.');
+        // Check if the selected patient is valid
+        if (!selectedPatient || !web3.utils.isAddress(selectedPatient)) {
+            alert('Invalid patient address. Please try again.');
 				return;
 			}
 	
-			const chosenPatient = patientsWithResponsesFiltered[selectedPatient - 1].patientAddress;
-			const responses = await bloodBankContract.methods.getPatientResponses(chosenPatient).call();
-	
-			const patientDashboard = document.getElementById('patientDashboard');
-	
-			while (patientDashboard.firstChild) {
-				patientDashboard.removeChild(patientDashboard.firstChild);
-			}
-	
-			responses.forEach((response) => {
-				const responseMessage = response.response ? 'approved' : 'rejected';
+        // Call the smart contract function to get patient responses
+        const responses = await bloodBankContract.methods.getPatientResponses(selectedPatient).call();
+
+        // Display responses
+        const responseList = document.getElementById('responseList');
+        if (responseList) {
+            responseList.innerHTML = '';
+            responses.forEach((response, index) => {
 				const listItem = document.createElement('li');
-				listItem.textContent = `Blood donation request from patient at ${chosenPatient} has been ${responseMessage}.`;
-				patientDashboard.appendChild(listItem);
+                listItem.textContent = `Response ${index + 1}: ${response.isResponded ? 'Approved' : 'Declined'}`;
+                responseList.appendChild(listItem);
 			});
+        }
 		} catch (error) {
-			console.error('Error during displaying patient responses:', error.message);
-		}
-	}
-	
-	
-	
-	
-	
-//0x399bbF80299a58e697a3028927f5Ee4c0d6fFb83
-//0x399bbF80299a58e697a3028927f5Ee4c0d6fFb83  
+        console.error('Error displaying patient responses:', error);
+        alert('Error loading patient responses. Please check console for details.');
+    }
+}
+
+// Function to display registered users
+async function displayRegisteredUsers() {
+    try {
+        const { registeredDonors, registeredPatients } = await bloodBankContract.methods.getRegisteredUsers().call();
+        
+        // Display donors
+        const donorsList = document.getElementById('donorsList');
+        if (donorsList) {
+            donorsList.innerHTML = '';
+            for (const donorAddress of registeredDonors) {
+                const donor = await bloodBankContract.methods.donors(donorAddress).call();
+                const isAllowed = await bloodBankContract.methods.isDonorAllowed(donorAddress).call();
+                
+                const donorItem = document.createElement('div');
+                donorItem.className = 'user-card';
+                donorItem.innerHTML = `
+                    <div class="user-info">
+                        <strong>${donor.name}</strong>
+                        <br>
+                        <small>Address: ${donorAddress}</small>
+                        <br>
+                        <small>Blood Type: ${['A', 'B', 'AB', 'O'][donor.bloodType]}</small>
+                    </div>
+                    <div class="status-badge ${isAllowed ? 'status-approved' : 'status-pending'}">
+                        ${isAllowed ? 'Approved' : 'Pending'}
+                    </div>
+                `;
+                donorsList.appendChild(donorItem);
+            }
+        }
+
+        // Display patients
+        const patientsList = document.getElementById('patientsList');
+        if (patientsList) {
+            patientsList.innerHTML = '';
+            for (const patientAddress of registeredPatients) {
+                const patient = await bloodBankContract.methods.patients(patientAddress).call();
+                const isAllowed = await bloodBankContract.methods.isPatientAllowed(patientAddress).call();
+                
+                const patientItem = document.createElement('div');
+                patientItem.className = 'user-card';
+                patientItem.innerHTML = `
+                    <div class="user-info">
+                        <strong>${patient.name}</strong>
+                        <br>
+                        <small>Address: ${patientAddress}</small>
+                        <br>
+                        <small>Blood Type: ${['A', 'B', 'AB', 'O'][patient.bloodType]}</small>
+                    </div>
+                    <div class="status-badge ${isAllowed ? 'status-approved' : 'status-pending'}">
+                        ${isAllowed ? 'Approved' : 'Pending'}
+                    </div>
+                `;
+                patientsList.appendChild(patientItem);
+            }
+        }
+    } catch (error) {
+        console.error('Error displaying registered users:', error);
+        alert('Error loading registered users. Please check console for details.');
+    }
+}
+
+// Function to decline a user
+async function declineUser() {
+    try {
+        const { registeredDonors, registeredPatients } = await bloodBankContract.methods.getRegisteredUsers().call();
+        
+        // Create a list of all users
+        const allUsers = [];
+        
+        // Add donors
+        for (const donorAddress of registeredDonors) {
+            const donor = await bloodBankContract.methods.donors(donorAddress).call();
+            const isAllowed = await bloodBankContract.methods.isDonorAllowed(donorAddress).call();
+            if (isAllowed) {
+                allUsers.push({
+                    address: donorAddress,
+                    name: donor.name,
+                    type: 'Donor',
+                    bloodType: ['A', 'B', 'AB', 'O'][donor.bloodType]
+                });
+            }
+        }
+        
+        // Add patients
+        for (const patientAddress of registeredPatients) {
+            const patient = await bloodBankContract.methods.patients(patientAddress).call();
+            const isAllowed = await bloodBankContract.methods.isPatientAllowed(patientAddress).call();
+            if (isAllowed) {
+                allUsers.push({
+                    address: patientAddress,
+                    name: patient.name,
+                    type: 'Patient',
+                    bloodType: ['A', 'B', 'AB', 'O'][patient.bloodType]
+                });
+            }
+        }
+        
+        if (allUsers.length === 0) {
+            alert('No approved users to decline');
+            return;
+        }
+        
+        // Create a formatted list of users
+        const userList = allUsers.map((user, index) => 
+            `${index + 1}. ${user.type}: ${user.name}\n   Address: ${user.address}\n   Blood Type: ${user.bloodType}`
+        ).join('\n\n');
+        
+        // Show the list and get user input
+        const userInput = prompt(
+            'Select a user to decline (enter number):\n\n' + userList
+        );
+        
+        if (!userInput) {
+            return; // User cancelled
+        }
+        
+        const selectedIndex = parseInt(userInput) - 1;
+        if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= allUsers.length) {
+            alert('Invalid selection. Please enter a number between 1 and ' + allUsers.length);
+            return;
+        }
+        
+        const selectedUser = allUsers[selectedIndex];
+        
+        // Revoke permission based on user type
+        if (selectedUser.type === 'Donor') {
+            await bloodBankContract.methods.revokeDonorPermission(selectedUser.address)
+                .send({ from: await getCurrentUserAddress() });
+            alert(`Donor ${selectedUser.name} has been declined`);
+        } else {
+            await bloodBankContract.methods.revokePatientPermission(selectedUser.address)
+                .send({ from: await getCurrentUserAddress() });
+            alert(`Patient ${selectedUser.name} has been declined`);
+        }
+        
+        // Refresh the display
+        await displayRegisteredUsers();
+        
+    } catch (error) {
+        console.error('Error during declining user:', error);
+        alert('Error declining user: ' + error.message);
+    }
+}
+
+// Function to remove a specific donation
+function removeDonation(donorAddress, bloodType, amount) {
+    // Find and remove the donation from localStorage
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('donation_')) {
+            const donationData = JSON.parse(localStorage.getItem(key));
+            if (donationData.donorAddress === donorAddress && 
+                donationData.bloodType === bloodType && 
+                donationData.amount === amount) {
+                localStorage.removeItem(key);
+                break;
+            }
+        }
+    }
+    // Refresh the display
+    displayStoredDonationDetails();
+}
