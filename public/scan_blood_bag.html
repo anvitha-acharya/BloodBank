@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan Blood Bag QR Code</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .scanner-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #qrScanner {
+            max-width: 100%;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+
+        .donation-history-card {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .history-details {
+            margin-top: 15px;
+        }
+
+        .history-details p {
+            margin: 8px 0;
+        }
+
+        .history-details a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .history-details a:hover {
+            text-decoration: underline;
+        }
+
+        h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="scanner-container">
+            <h2>Scan Blood Bag QR Code</h2>
+            <p>Position the QR code within the camera view to scan</p>
+            <video id="qrScanner"></video>
+        </div>
+        <div id="donationHistory"></div>
+    </div>
+
+    <!-- Include Web3.js -->
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <!-- Include QR Scanner -->
+    <script src="https://unpkg.com/qr-scanner@1.4.2/qr-scanner.umd.min.js"></script>
+    <!-- Include your app.js -->
+    <script src="app.js"></script>
+</body>
+</html> 

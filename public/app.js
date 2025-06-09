@@ -29,7 +29,7 @@ async function initWeb3() {
             console.log('Chain ID:', chainId);
             
             // Initialize contract
-            const contractAddress = '0xEbe8Ad8943e5008D0212F4534f1A2Ef51BE46d27';
+            const contractAddress = '0xF87745a994B941bBc49a9f61c7c5B13517a2Cd37';
             console.log('Attempting to connect to contract at:', contractAddress);
             
             // Check if the contract exists at the specified address
@@ -105,41 +105,6 @@ if (window.ethereum) {
     });
 }
 
-// Add a button to check chain ID and contract status
-async function checkContractStatus() {
-    try {
-        const chainId = await web3.eth.getChainId();
-        console.log('Current Chain ID:', chainId);
-        
-        const code = await web3.eth.getCode(contractAddress);
-        console.log('Contract code exists:', code !== '0x' && code !== '');
-        
-        alert(`Chain ID: ${chainId}\nContract exists: ${code !== '0x' && code !== ''}`);
-    } catch (error) {
-        console.error('Error checking contract status:', error);
-        alert('Error checking contract status: ' + error.message);
-    }
-}
-
-// Function to add status button
-function addStatusButton() {
-    console.log('Adding status button...');
-    const statusButton = document.createElement('button');
-    statusButton.textContent = 'Check Contract Status';
-    statusButton.onclick = checkContractStatus;
-    statusButton.style.position = 'fixed';
-    statusButton.style.top = '10px';
-    statusButton.style.right = '10px';
-    statusButton.style.zIndex = '1000';
-    statusButton.style.padding = '10px';
-    statusButton.style.backgroundColor = '#4CAF50';
-    statusButton.style.color = 'white';
-    statusButton.style.border = 'none';
-    statusButton.style.borderRadius = '5px';
-    statusButton.style.cursor = 'pointer';
-    document.body.appendChild(statusButton);
-    console.log('Status button added');
-}
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -187,7 +152,7 @@ async function checkChainId() {
 }
 
 // Contract Address and ABI (replace with your actual deployed contract address and ABI)
-const contractAddress = '0xEbe8Ad8943e5008D0212F4534f1A2Ef51BE46d27';
+const contractAddress = '0xF87745a994B941bBc49a9f61c7c5B13517a2Cd37';
 const contractABI = [
 	{
 		"inputs": [],
@@ -1695,9 +1660,39 @@ function getCurrentUserAddress() {
     }
 }
 
+// Add a function to get optimal gas parameters
+async function getGasParameters() {
+    try {
+        // Get current gas price from network
+        const gasPrice = await web3.eth.getGasPrice();
+        // Convert to Gwei and set to 2 Gwei
+        const gasPriceInGwei = 2;
+        const gasPriceInWei = web3.utils.toWei(gasPriceInGwei.toString(), 'gwei');
+        
+        return {
+            gasPrice: gasPriceInWei,
+            gas: 200000 // Set a reasonable gas limit
+        };
+    } catch (error) {
+        console.error('Error getting gas parameters:', error);
+        throw error;
+    }
+}
 
+// Modify the donateBlood function to use custom gas parameters
 async function donateBlood() {
     try {
+        // Ensure QR code library is loaded
+        if (typeof QRCode === 'undefined') {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
         const donorAddress = getCurrentUserAddress();
         if (!donorAddress) {
             alert('Please connect your MetaMask wallet first');
@@ -1728,12 +1723,35 @@ async function donateBlood() {
             return;
         }
 
-        // Call the smart contract function for blood donation
-        await bloodBankContract.methods.donateBlood(bloodType, amount).send({ from: donorAddress });
+        // Get gas parameters
+        const gasParams = await getGasParameters();
 
-        // Store the donation details
-        const donationKey = `donation_${new Date().getTime()}`;
-        const donationData = { donorAddress, bloodType: bloodTypeStr, amount };
+        // Call the smart contract function for blood donation with custom gas parameters
+        const tx = await bloodBankContract.methods.donateBlood(bloodType, amount)
+            .send({ 
+                from: donorAddress,
+                gasPrice: gasParams.gasPrice,
+                gas: gasParams.gas
+            });
+
+        // Generate unique donation ID
+        const donationId = `DON-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        // Store the donation details with QR data
+        const donationData = {
+            donationId,
+            donorAddress,
+            bloodType: bloodTypeStr,
+            amount,
+            timestamp: Date.now(),
+            txHash: tx.transactionHash
+        };
+
+        // Generate QR code
+        await generateBloodBagQR(donationData);
+
+        // Store in localStorage
+        const donationKey = `donation_${donationId}`;
         localStorage.setItem(donationKey, JSON.stringify(donationData));
         
         // Clear and refresh the display
@@ -1743,33 +1761,95 @@ async function donateBlood() {
         }
         displayStoredDonationDetails();
         
-        alert('Blood Donation Successful');
+        alert('Blood Donation Successful! QR Code has been generated.');
     } catch (error) {
         console.error('Error during blood donation:', error.message);
         alert('Error during blood donation: ' + error.message);
     }
 }
 
+// Modify other transaction functions to use the same gas parameters
+async function registerAsDonor(name, bloodType) {
+    try {
+        const gasParams = await getGasParameters();
+        return await bloodBankContract.methods.registerAsDonor(name, bloodType)
+            .send({ 
+                from: getCurrentUserAddress(),
+                gasPrice: gasParams.gasPrice,
+                gas: gasParams.gas
+            });
+    } catch (error) {
+        console.error('Error registering donor:', error);
+        throw error;
+    }
+}
+
+async function registerAsPatient(name, bloodType) {
+    try {
+        const gasParams = await getGasParameters();
+        return await bloodBankContract.methods.registerAsPatient(name, bloodType)
+            .send({ 
+                from: getCurrentUserAddress(),
+                gasPrice: gasParams.gasPrice,
+                gas: gasParams.gas
+            });
+    } catch (error) {
+        console.error('Error registering patient:', error);
+        throw error;
+    }
+}
+
+async function requestBlood(bloodType, amount) {
+    try {
+        const gasParams = await getGasParameters();
+        return await bloodBankContract.methods.requestBlood(bloodType, amount)
+            .send({ 
+                from: getCurrentUserAddress(),
+                gasPrice: gasParams.gasPrice,
+                gas: gasParams.gas
+            });
+    } catch (error) {
+        console.error('Error requesting blood:', error);
+        throw error;
+    }
+}
+
+async function respondToRequest(patientAddress, bloodType, response) {
+    try {
+        const gasParams = await getGasParameters();
+        return await bloodBankContract.methods.respondToRequest(patientAddress, bloodType, response)
+            .send({ 
+                from: getCurrentUserAddress(),
+                gasPrice: gasParams.gasPrice,
+                gas: gasParams.gas
+            });
+    } catch (error) {
+        console.error('Error responding to request:', error);
+        throw error;
+    }
+}
+
 // Function to display stored donation details
 async function displayStoredDonationDetails() {
     try {
-		const donationDetailsList = document.getElementById('donationDetailsList');
+        const donationDetailsList = document.getElementById('donationDetailsList');
         const totalDonatedElement = document.getElementById('totalDonated');
         const lastDonationElement = document.getElementById('lastDonation');
         const bloodTypeElement = document.getElementById('bloodType');
-	
-		if (donationDetailsList) {
+        const qrCodeContainer = document.getElementById('qrCodeContainer');
+    
+        if (donationDetailsList) {
             let totalAmount = 0;
             let lastDonation = null;
             let bloodType = null;
             donationDetailsList.innerHTML = ''; // Clear existing entries
-	
+    
             // Get all donation entries and sort them by timestamp
             const donations = [];
-			for (let i = 0; i < localStorage.length; i++) {
-				const key = localStorage.key(i);
-				if (key.startsWith('donation_')) {
-					const donationData = JSON.parse(localStorage.getItem(key));
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('donation_')) {
+                    const donationData = JSON.parse(localStorage.getItem(key));
                     donations.push({
                         ...donationData,
                         timestamp: parseInt(key.split('_')[1])
@@ -1781,9 +1861,9 @@ async function displayStoredDonationDetails() {
             donations.sort((a, b) => b.timestamp - a.timestamp);
 
             // Display donations and update statistics
-            donations.forEach(donation => {
-					// Create list item and append it to the list
-					const listItem = document.createElement('li');
+            for (const donation of donations) {
+                // Create list item and append it to the list
+                const listItem = document.createElement('li');
                 listItem.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span>Donation from donor at ${donation.donorAddress}. Blood Type: ${donation.bloodType}, Amount: ${donation.amount}</span>
@@ -1791,9 +1871,9 @@ async function displayStoredDonationDetails() {
                                 class="btn btn-danger" style="margin-left: 10px; padding: 2px 8px;">Remove</button>
                     </div>
                 `;
-					donationDetailsList.appendChild(listItem);
-	
-					// Update total amount
+                donationDetailsList.appendChild(listItem);
+    
+                // Update total amount
                 totalAmount += parseInt(donation.amount);
 
                 // Update last donation if not set
@@ -1805,10 +1885,10 @@ async function displayStoredDonationDetails() {
                 if (!bloodType) {
                     bloodType = donation.bloodType;
                 }
-            });
-	
-			// Display the total amount
-			if (totalDonatedElement) {
+            }
+    
+            // Display the total amount
+            if (totalDonatedElement) {
                 totalDonatedElement.textContent = totalAmount;
             }
 
@@ -1825,15 +1905,115 @@ async function displayStoredDonationDetails() {
             // Display blood type
             if (bloodTypeElement) {
                 bloodTypeElement.textContent = bloodType || 'Not specified';
-			}
-		} else {
-			console.error('Element with ID "donationDetailsList" not found.');
+            }
+
+            // Generate QR code for the most recent donation
+            if (lastDonation && qrCodeContainer) {
+                // Clear existing QR code
+                qrCodeContainer.innerHTML = '';
+                
+                // Create a wrapper div for better styling
+                const qrWrapper = document.createElement('div');
+                qrWrapper.style.cssText = `
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    padding: 20px;
+                    background: #f8f9fa;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    margin: 20px 0;
+                `;
+                
+                // Add title
+                const title = document.createElement('h4');
+                title.textContent = 'Blood Donation QR Code';
+                title.style.cssText = `
+                    margin-bottom: 15px;
+                    color: #2c3e50;
+                    font-weight: 600;
+                `;
+                qrWrapper.appendChild(title);
+                
+                // Create canvas element for QR code
+                const canvas = document.createElement('canvas');
+                canvas.style.cssText = `
+                    background: white;
+                    padding: 10px;
+                    border-radius: 5px;
+                    margin-bottom: 15px;
+                `;
+                qrWrapper.appendChild(canvas);
+                
+                // Generate QR code
+                await QRCode.toCanvas(canvas, JSON.stringify(lastDonation), {
+                    width: 200,
+                    margin: 1,
+                    color: {
+                        dark: '#000000',
+                        light: '#ffffff'
+                    }
+                });
+
+                // Add download button with improved styling
+                const downloadBtn = document.createElement('button');
+                downloadBtn.textContent = 'Download QR Code';
+                downloadBtn.className = 'btn btn-primary';
+                downloadBtn.style.cssText = `
+                    padding: 8px 20px;
+                    font-size: 14px;
+                    border-radius: 5px;
+                    background-color: #007bff;
+                    border: none;
+                    color: white;
+                    cursor: pointer;
+                    transition: background-color 0.3s ease;
+                    margin-top: 10px;
+                `;
+                
+                downloadBtn.onclick = () => {
+                    const link = document.createElement('a');
+                    link.download = `blood-donation-${lastDonation.donationId}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                };
+                
+                // Add hover effect
+                downloadBtn.onmouseover = () => {
+                    downloadBtn.style.backgroundColor = '#0056b3';
+                };
+                downloadBtn.onmouseout = () => {
+                    downloadBtn.style.backgroundColor = '#007bff';
+                };
+                
+                qrWrapper.appendChild(downloadBtn);
+                
+                // Add donation details below
+                const detailsDiv = document.createElement('div');
+                detailsDiv.style.cssText = `
+                    margin-top: 15px;
+                    text-align: center;
+                    color: #666;
+                    font-size: 14px;
+                `;
+                detailsDiv.innerHTML = `
+                    <p><strong>Donation ID:</strong> ${lastDonation.donationId}</p>
+                    <p><strong>Blood Type:</strong> ${lastDonation.bloodType}</p>
+                    <p><strong>Amount:</strong> ${lastDonation.amount} units</p>
+                    <p><strong>Date:</strong> ${new Date(lastDonation.timestamp).toLocaleDateString()}</p>
+                `;
+                qrWrapper.appendChild(detailsDiv);
+                
+                qrCodeContainer.appendChild(qrWrapper);
+            }
+        } else {
+            console.error('Element with ID "donationDetailsList" not found.');
         }
     } catch (error) {
         console.error('Error displaying donation details:', error);
         alert('Error loading donation details. Please check console for details.');
-		}
-	}
+    }
+}
 
 	// Function to request blood
 	async function requestBlood() {
@@ -2579,3 +2759,114 @@ async function registerDonor() {
         alert('Error registering donor: ' + error.message);
     }
 }
+
+// Add QR code library
+function addQRCodeScript() {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js';
+    document.head.appendChild(script);
+}
+
+// Function to generate QR code for blood donation
+async function generateBloodBagQR(donationData) {
+    try {
+        const qrData = {
+            donationId: donationData.donationId,
+            donorAddress: donationData.donorAddress,
+            bloodType: donationData.bloodType,
+            amount: donationData.amount,
+            timestamp: donationData.timestamp,
+            txHash: donationData.txHash
+        };
+
+        const qrString = JSON.stringify(qrData);
+        const qrContainer = document.getElementById('qrCodeContainer');
+        
+        if (qrContainer) {
+            // Clear previous QR code
+            qrContainer.innerHTML = '';
+            
+            // Create canvas element
+            const canvas = document.createElement('canvas');
+            qrContainer.appendChild(canvas);
+            
+            // Generate QR code
+            await QRCode.toCanvas(canvas, qrString, {
+                width: 200,
+                margin: 2,
+                color: {
+                    dark: '#000000',
+                    light: '#ffffff'
+                }
+            });
+        }
+
+        return qrString;
+    } catch (error) {
+        console.error('Error generating QR code:', error);
+        throw error;
+    }
+}
+
+// Function to display donation history from QR code
+async function displayDonationHistory(qrData) {
+    try {
+        const historyContainer = document.getElementById('donationHistory');
+        if (!historyContainer) return;
+
+        const donationData = JSON.parse(qrData);
+        
+        // Get donor details from blockchain
+        const donor = await bloodBankContract.methods.donors(donationData.donorAddress).call();
+        
+        // Create history display
+        const historyHTML = `
+            <div class="donation-history-card">
+                <h3>Blood Bag Details</h3>
+                <div class="history-details">
+                    <p><strong>Donation ID:</strong> ${donationData.donationId}</p>
+                    <p><strong>Donor Name:</strong> ${donor.name}</p>
+                    <p><strong>Blood Type:</strong> ${donationData.bloodType}</p>
+                    <p><strong>Amount:</strong> ${donationData.amount} units</p>
+                    <p><strong>Date:</strong> ${new Date(donationData.timestamp).toLocaleString()}</p>
+                    <p><strong>Transaction Hash:</strong> <a href="https://sepolia.etherscan.io/tx/${donationData.txHash}" target="_blank">${donationData.txHash}</a></p>
+                </div>
+            </div>
+        `;
+
+        historyContainer.innerHTML = historyHTML;
+    } catch (error) {
+        console.error('Error displaying donation history:', error);
+        alert('Error loading donation history: ' + error.message);
+    }
+}
+
+// Add QR code scanner functionality
+function addQRScanner() {
+    const scannerContainer = document.createElement('div');
+    scannerContainer.innerHTML = `
+        <div class="scanner-container">
+            <h3>Scan Blood Bag QR Code</h3>
+            <video id="qrScanner" style="width: 100%; max-width: 400px;"></video>
+            <div id="donationHistory"></div>
+        </div>
+    `;
+    document.body.appendChild(scannerContainer);
+
+    // Initialize QR scanner
+    const video = document.getElementById('qrScanner');
+    const scanner = new QrScanner(video, result => {
+        displayDonationHistory(result);
+    });
+
+    // Start scanner
+    scanner.start();
+}
+
+// Initialize QR code functionality on page load
+window.addEventListener('load', () => {
+    addQRCodeScript();
+    if (document.getElementById('qrScanner')) {
+        addQRScanner();
+    }
+});
