@@ -1,38 +1,38 @@
 # BLOODBANK - Blockchain Based Blood Donation Tracking System
 
-## Steps to run it on ur system
+## Steps to run it on your system
 
 ### 1. Clone the repo
-`
+```
 git clone https://github.com/anvitha-acharya/BloodBank.git
 cd BloodBank
-`
+```
 ### 2. Install Dependencies
-`
+```
 npm install
-`
+```
 ### 3. Start ganache
-`
+```
 ganache-cli
-`
+```
 Note down the RPC address and the account and their keys in a separate file
 
 ### 4.Compile and deploy contracts
-`
+```
 truffle compile
 truffle migrate --reset
-`
+```
 Replace `contractAddress` in index.html and app.js with the new contract address everytime you compile.
 
 ### 5. Start backend
-`
+```
 node server.js
-`
+```
 
 ### 6. Serve Frontend
-`
+```
 http-server public
-`
+```
 
 ## MetaMask Connection
 
